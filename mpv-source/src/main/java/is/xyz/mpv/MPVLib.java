@@ -8,6 +8,7 @@ import android.view.Surface;
 
 import androidx.annotation.NonNull;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
