@@ -128,6 +128,7 @@ jobs:
             abi="${mapping##*:}"
             mkdir -p "src/main/jniLibs/$abi"
             cp -L -f src/main/native-libs/$abi/*.so "src/main/jniLibs/$abi/"
+            cp -L -f "src/main/libs/$abi/libplayer.so" "src/main/jniLibs/$abi/"
           done
           test -f src/main/jniLibs/arm64-v8a/libplayer.so
           test -f src/main/jniLibs/armeabi-v7a/libplayer.so
