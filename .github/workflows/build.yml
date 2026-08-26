@@ -92,7 +92,7 @@ jobs:
           for arch in armv7l arm64 x86 x86_64; do
             bash buildscripts/buildall.sh --arch "$arch" mpv
           done
-          rm -rf src/main/libs src/main/native-libs src/main/native-headers
+          rm -rf src/main/libs src/main/jniLibs src/main/native-libs src/main/native-headers
           declare -a prefix_map=(
             "armv7l:armeabi-v7a"
             "arm64:arm64-v8a"
@@ -123,15 +123,16 @@ jobs:
             cp -a "$source_prefix/include/." "$header_destination/"
           done
           "$PWD/buildscripts/sdk/android-ndk-r27c/ndk-build" -C src/main -j2
+          rm -rf src/main/jniLibs
           for mapping in "${prefix_map[@]}"; do
             abi="${mapping##*:}"
-            mkdir -p "src/main/libs/$abi"
-            cp -L -f src/main/native-libs/$abi/*.so "src/main/libs/$abi/"
+            mkdir -p "src/main/jniLibs/$abi"
+            cp -L -f src/main/native-libs/$abi/*.so "src/main/jniLibs/$abi/"
           done
-          test -f src/main/libs/arm64-v8a/libplayer.so
-          test -f src/main/libs/armeabi-v7a/libplayer.so
-          test -f src/main/libs/x86/libplayer.so
-          test -f src/main/libs/x86_64/libplayer.so
+          test -f src/main/jniLibs/arm64-v8a/libplayer.so
+          test -f src/main/jniLibs/armeabi-v7a/libplayer.so
+          test -f src/main/jniLibs/x86/libplayer.so
+          test -f src/main/jniLibs/x86_64/libplayer.so
 
       - name: Build selected APKs
         shell: bash
