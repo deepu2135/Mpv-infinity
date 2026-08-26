@@ -85,6 +85,8 @@ jobs:
         run: |
           set -euo pipefail
           cd mpv-source
+          sudo apt-get update
+          sudo apt-get install -y meson ninja-build
           export IN_CI=1
           bash buildscripts/download.sh
           for arch in armv7l arm64 x86 x86_64; do
@@ -96,7 +98,7 @@ jobs:
           PREFIX64="$PWD/prefix/arm64" \
           PREFIX_X86="$PWD/prefix/x86" \
           PREFIX_X64="$PWD/prefix/x86_64" \
-          "$PWD/buildscripts/sdk/android-ndk-r29/ndk-build" -C src/main -j2
+          "$PWD/buildscripts/sdk/android-ndk-r27c/ndk-build" -C src/main -j2
           test -f src/main/libs/arm64-v8a/libplayer.so
           test -f src/main/libs/armeabi-v7a/libplayer.so
           test -f src/main/libs/x86/libplayer.so
