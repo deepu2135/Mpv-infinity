@@ -2,6 +2,7 @@ LOCAL_PATH:= $(call my-dir)
 # The CI/F-Droid build copies reviewed native prefix outputs into this ABI-local directory.
 # Keeping LOCAL_SRC_FILES relative avoids NDK prebuilt-library path issues with symlinked prefixes.
 PREFIX = ../libs/$(TARGET_ARCH_ABI)
+HEADER_PREFIX = ../native-headers/$(TARGET_ARCH_ABI)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libswresample
@@ -41,19 +42,19 @@ include $(PREBUILT_SHARED_LIBRARY)
 include $(CLEAR_VARS)
 LOCAL_MODULE := libavdevice
 LOCAL_SRC_FILES := $(PREFIX)/$(LOCAL_MODULE).so
-LOCAL_EXPORT_C_INCLUDES := $(PREFIX)/include
+LOCAL_EXPORT_C_INCLUDES := $(HEADER_PREFIX)/include
 include $(PREBUILT_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libxml2
 LOCAL_SRC_FILES := $(PREFIX)/$(LOCAL_MODULE).so
-LOCAL_EXPORT_C_INCLUDES := $(PREFIX)/include
+LOCAL_EXPORT_C_INCLUDES := $(HEADER_PREFIX)/include
 include $(PREBUILT_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libmpv
 LOCAL_SRC_FILES := $(PREFIX)/libmpv.so
-LOCAL_EXPORT_C_INCLUDES := $(PREFIX)/include
+LOCAL_EXPORT_C_INCLUDES := $(HEADER_PREFIX)/include
 include $(PREBUILT_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)
