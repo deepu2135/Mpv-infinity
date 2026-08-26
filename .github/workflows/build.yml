@@ -106,7 +106,13 @@ jobs:
             destination="src/main/libs/$abi"
             header_destination="src/main/native-headers/$abi"
             mkdir -p "$destination" "$header_destination"
-            find "$source_prefix/lib" -maxdepth 1 \( -type f -o -type l \) -name '*.so' -exec cp -L -f {} "$destination/" \;
+            shopt -s nullglob
+            shared_libs=("$source_prefix"/lib/*.so)
+            if (( ${#shared_libs[@]} == 0 )); then
+              echo "No shared libraries found in $source_prefix/lib"
+              exit 1
+            fi
+            cp -L -f "${shared_libs[@]}" "$destination/"
             cp -a "$source_prefix/include/." "$header_destination/"
           done
           "$PWD/buildscripts/sdk/android-ndk-r27c/ndk-build" -C src/main -j2
