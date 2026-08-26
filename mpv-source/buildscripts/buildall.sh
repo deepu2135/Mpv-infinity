@@ -114,9 +114,10 @@ build () {
 		local deps=$(getdeps $1)
 		echo >&2 "Dependencies: $deps"
 		for dep in $deps; do
-			build $dep
+			build "$dep" || return 1
 		done
-	fi
+fi
+
 	printf >&2 '\e[1;34m%s\e[m\n' "Building $1..."
 	if [ "$1" == "mpv-android" ]; then
 		pushd ..
@@ -125,8 +126,10 @@ build () {
 		pushd deps/$1
 		BUILDSCRIPT=../../scripts/$1.sh
 	fi
-	[ $cleanbuild -eq 1 ] && $BUILDSCRIPT clean
-	$BUILDSCRIPT build
+	if [ $cleanbuild -eq 1 ]; then
+		$BUILDSCRIPT clean || { popd; return 1; }
+	fi
+	$BUILDSCRIPT build || { status=$?; popd; return $status; }
 	popd
 }
 

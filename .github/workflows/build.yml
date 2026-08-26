@@ -86,7 +86,7 @@ jobs:
           set -euo pipefail
           cd mpv-source
           sudo apt-get update
-          sudo apt-get install -y meson ninja-build
+          sudo apt-get install -y meson ninja-build nasm
           export IN_CI=1
           bash buildscripts/download.sh
           for arch in armv7l arm64 x86 x86_64; do
