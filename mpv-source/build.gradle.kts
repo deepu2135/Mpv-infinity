@@ -11,7 +11,9 @@ android {
     consumerProguardFiles("consumer-rules.pro")
   }
 
-  sourceSets["main"].jniLibs.srcDir("src/main/libs")
+  sourceSets.named("main") {
+    jniLibs.srcDir("src/main/libs")
+  }
 
   buildFeatures {
     buildConfig = true
