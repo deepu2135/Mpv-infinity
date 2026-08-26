@@ -106,7 +106,7 @@ jobs:
             destination="src/main/libs/$abi"
             header_destination="src/main/native-headers/$abi"
             mkdir -p "$destination" "$header_destination"
-            find "$source_prefix/lib" -maxdepth 1 -type f -name '*.so' -exec cp -f {} "$destination/" \;
+            find "$source_prefix/lib" -maxdepth 1 \( -type f -o -type l \) -name '*.so' -exec cp -L -f {} "$destination/" \;
             cp -a "$source_prefix/include/." "$header_destination/"
           done
           "$PWD/buildscripts/sdk/android-ndk-r27c/ndk-build" -C src/main -j2
