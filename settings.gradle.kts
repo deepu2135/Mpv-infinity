@@ -35,3 +35,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "MpvInfinity"
 include(":app")
+include(":mpv-source")

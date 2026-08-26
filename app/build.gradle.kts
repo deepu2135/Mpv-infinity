@@ -73,6 +73,15 @@ android {
       buildConfigField("boolean", "MPV_SUPPORTS_VULKAN", "true")
       buildConfigField("boolean", "MPV_SUPPORTS_MEDIACODEC_VULKAN", "true")
     }
+
+    // Store-only source-build flavor. Standard remains on the existing optimized AARs.
+    create("store") {
+      dimension = "distribution"
+      buildConfigField("boolean", "ENABLE_UPDATE_FEATURE", "false")
+      buildConfigField("boolean", "SCOPED_STORAGE_ONLY", "false")
+      buildConfigField("boolean", "MPV_SUPPORTS_VULKAN", "true")
+      buildConfigField("boolean", "MPV_SUPPORTS_MEDIACODEC_VULKAN", "false")
+    }
   }
 
   dependenciesInfo {
@@ -279,6 +288,7 @@ dependencies {
   "standardImplementation"(files("libs/mpvlib.aar"))
   "noVulkanImplementation"(files("libs/mpvlib-no-vulkun.aar"))
   "fongmiImplementation"(files("libs/mpvlib-fongmi.aar"))
+  "storeImplementation"(project(":mpv-source"))
 
   // Network protocol libraries
   implementation(libs.smbj)
