@@ -1,7 +1,7 @@
 LOCAL_PATH:= $(call my-dir)
 # The CI/F-Droid build copies reviewed native prefix outputs into this ABI-local directory.
 # Keeping LOCAL_SRC_FILES relative avoids NDK prebuilt-library path issues with symlinked prefixes.
-PREFIX = $(LOCAL_PATH)/../libs/$(TARGET_ARCH_ABI)
+PREFIX = ../libs/$(TARGET_ARCH_ABI)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libswresample
