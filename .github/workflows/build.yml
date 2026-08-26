@@ -93,11 +93,21 @@ jobs:
             bash buildscripts/buildall.sh --arch "$arch" mpv
           done
           rm -rf src/main/libs
-          mkdir -p src/main/libs
-          PREFIX32="$PWD/prefix/armv7l/usr/local" \
-          PREFIX64="$PWD/prefix/arm64/usr/local" \
-          PREFIX_X86="$PWD/prefix/x86/usr/local" \
-          PREFIX_X64="$PWD/prefix/x86_64/usr/local" \
+          declare -a prefix_map=(
+            "armv7l:armeabi-v7a"
+            "arm64:arm64-v8a"
+            "x86:x86"
+            "x86_64:x86_64"
+          )
+          for mapping in "${prefix_map[@]}"; do
+            prefix_name="${mapping%%:*}"
+            abi="${mapping##*:}"
+            source_prefix="$PWD/buildscripts/prefix/$prefix_name/usr/local"
+            destination="src/main/libs/$abi"
+            mkdir -p "$destination/include"
+            cp -a "$source_prefix/lib/." "$destination/"
+            cp -a "$source_prefix/include/." "$destination/include/"
+          done
           "$PWD/buildscripts/sdk/android-ndk-r27c/ndk-build" -C src/main -j2
           test -f src/main/libs/arm64-v8a/libplayer.so
           test -f src/main/libs/armeabi-v7a/libplayer.so

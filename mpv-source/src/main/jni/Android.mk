@@ -1,68 +1,58 @@
 LOCAL_PATH:= $(call my-dir)
-
-ifeq ($(TARGET_ARCH_ABI),armeabi-v7a)
-PREFIX = $(PREFIX32)
-endif
-ifeq ($(TARGET_ARCH_ABI),arm64-v8a)
-PREFIX = $(PREFIX64)
-endif
-ifeq ($(TARGET_ARCH_ABI),x86_64)
-PREFIX = $(PREFIX_X64)
-endif
-ifeq ($(TARGET_ARCH_ABI),x86)
-PREFIX = $(PREFIX_X86)
-endif
+# The CI/F-Droid build copies reviewed native prefix outputs into this ABI-local directory.
+# Keeping LOCAL_SRC_FILES relative avoids NDK prebuilt-library path issues with symlinked prefixes.
+PREFIX = $(LOCAL_PATH)/../libs/$(TARGET_ARCH_ABI)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libswresample
-LOCAL_SRC_FILES := $(PREFIX)/lib/$(LOCAL_MODULE).so
+LOCAL_SRC_FILES := $(PREFIX)/$(LOCAL_MODULE).so
 include $(PREBUILT_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libpostproc
-LOCAL_SRC_FILES := $(PREFIX)/lib/$(LOCAL_MODULE).so
+LOCAL_SRC_FILES := $(PREFIX)/$(LOCAL_MODULE).so
 include $(PREBUILT_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libavutil
-LOCAL_SRC_FILES := $(PREFIX)/lib/$(LOCAL_MODULE).so
+LOCAL_SRC_FILES := $(PREFIX)/$(LOCAL_MODULE).so
 include $(PREBUILT_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libavcodec
-LOCAL_SRC_FILES := $(PREFIX)/lib/$(LOCAL_MODULE).so
+LOCAL_SRC_FILES := $(PREFIX)/$(LOCAL_MODULE).so
 include $(PREBUILT_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libavformat
-LOCAL_SRC_FILES := $(PREFIX)/lib/$(LOCAL_MODULE).so
+LOCAL_SRC_FILES := $(PREFIX)/$(LOCAL_MODULE).so
 include $(PREBUILT_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libswscale
-LOCAL_SRC_FILES := $(PREFIX)/lib/$(LOCAL_MODULE).so
+LOCAL_SRC_FILES := $(PREFIX)/$(LOCAL_MODULE).so
 include $(PREBUILT_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libavfilter
-LOCAL_SRC_FILES := $(PREFIX)/lib/$(LOCAL_MODULE).so
+LOCAL_SRC_FILES := $(PREFIX)/$(LOCAL_MODULE).so
 include $(PREBUILT_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libavdevice
-LOCAL_SRC_FILES := $(PREFIX)/lib/$(LOCAL_MODULE).so
+LOCAL_SRC_FILES := $(PREFIX)/$(LOCAL_MODULE).so
 LOCAL_EXPORT_C_INCLUDES := $(PREFIX)/include
 include $(PREBUILT_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libxml2
-LOCAL_SRC_FILES := $(PREFIX)/lib/$(LOCAL_MODULE).so
+LOCAL_SRC_FILES := $(PREFIX)/$(LOCAL_MODULE).so
 LOCAL_EXPORT_C_INCLUDES := $(PREFIX)/include
 include $(PREBUILT_SHARED_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libmpv
-LOCAL_SRC_FILES := $(PREFIX)/lib/libmpv.so
+LOCAL_SRC_FILES := $(PREFIX)/libmpv.so
 LOCAL_EXPORT_C_INCLUDES := $(PREFIX)/include
 include $(PREBUILT_SHARED_LIBRARY)
 
