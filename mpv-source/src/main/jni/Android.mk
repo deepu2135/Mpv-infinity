@@ -2,7 +2,7 @@ LOCAL_PATH := $(call my-dir)
 # The CI/F-Droid build stages reviewed native libraries per ABI in ../libs.
 # Only modules directly linked by libplayer are declared here; libmpv and FFmpeg
 # carry their own runtime DT_NEEDED dependencies, which are packaged alongside them.
-PREFIX := ../libs/$(TARGET_ARCH_ABI)
+PREFIX := ../native-libs/$(TARGET_ARCH_ABI)
 HEADER_PREFIX := ../native-headers/$(TARGET_ARCH_ABI)
 
 include $(CLEAR_VARS)
