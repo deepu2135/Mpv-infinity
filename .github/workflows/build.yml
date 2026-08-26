@@ -106,13 +106,20 @@ jobs:
             destination="src/main/libs/$abi"
             header_destination="src/main/native-headers/$abi"
             mkdir -p "$destination" "$header_destination"
-            shopt -s nullglob
-            shared_libs=("$source_prefix"/lib/*.so)
-            if (( ${#shared_libs[@]} == 0 )); then
-              echo "No shared libraries found in $source_prefix/lib"
-              exit 1
-            fi
-            cp -L -f "${shared_libs[@]}" "$destination/"
+            native_libs=(libswresample libavutil libavcodec libavformat libswscale libavfilter libavdevice libmpv)
+            for library in "${native_libs[@]}"; do
+              source_library="$source_prefix/lib/$library.so"
+              if [[ ! -e "$source_library" ]]; then
+                shopt -s nullglob
+                versioned=("$source_prefix"/lib/"$library.so."*)
+                if (( ${#versioned[@]} == 0 )); then
+                  echo "Missing $library shared library in $source_prefix/lib"
+                  exit 1
+                fi
+                source_library="${versioned[0]}"
+              fi
+              cp -L -f "$source_library" "$destination/$library.so"
+            done
             cp -a "$source_prefix/include/." "$header_destination/"
           done
           "$PWD/buildscripts/sdk/android-ndk-r27c/ndk-build" -C src/main -j2
