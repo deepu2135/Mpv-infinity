@@ -94,10 +94,10 @@ jobs:
           done
           rm -rf src/main/libs
           mkdir -p src/main/libs
-          PREFIX32="$PWD/prefix/armv7l" \
-          PREFIX64="$PWD/prefix/arm64" \
-          PREFIX_X86="$PWD/prefix/x86" \
-          PREFIX_X64="$PWD/prefix/x86_64" \
+          PREFIX32="$PWD/prefix/armv7l/usr/local" \
+          PREFIX64="$PWD/prefix/arm64/usr/local" \
+          PREFIX_X86="$PWD/prefix/x86/usr/local" \
+          PREFIX_X64="$PWD/prefix/x86_64/usr/local" \
           "$PWD/buildscripts/sdk/android-ndk-r27c/ndk-build" -C src/main -j2
           test -f src/main/libs/arm64-v8a/libplayer.so
           test -f src/main/libs/armeabi-v7a/libplayer.so
