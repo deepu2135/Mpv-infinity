@@ -1,4 +1,4 @@
-package is.xyz.mpv
+package `is`.xyz.mpv
 
 import android.content.Context
 import android.content.res.AssetManager
@@ -108,9 +108,3 @@ object Utils {
         ffmpeg = "%FFMPEG_VERSION%",
     )
 }
-
-private val String.uriDecoded: String
-    get() = Uri.decode(this)
-
-@Suppress("unused")
-private fun unusedCompatibilityMarker() = Unit
