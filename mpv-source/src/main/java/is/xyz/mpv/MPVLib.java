@@ -65,7 +65,11 @@ public final class MPVLib {
         } catch (RuntimeException ignored) {
             return null;
         } finally {
-            retriever.release();
+            try {
+                retriever.release();
+            } catch (IOException ignored) {
+                // Thumbnail cleanup must not fail the playback-facing API.
+            }
         }
     }
 
