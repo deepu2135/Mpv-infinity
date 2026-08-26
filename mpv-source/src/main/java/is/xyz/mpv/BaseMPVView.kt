@@ -58,7 +58,7 @@ abstract class BaseMPVView(context: Context, attrs: AttributeSet) :
         MPVLib.setOptionString("force-window", "yes")
         val pendingFile = filePath
         if (pendingFile != null) {
-            MPVLib.command(arrayOf("loadfile", pendingFile))
+            MPVLib.command("loadfile", pendingFile)
             filePath = null
         } else {
             MPVLib.setPropertyString("vo", voInUse)
