@@ -124,13 +124,28 @@ jobs:
           done
           "$PWD/buildscripts/sdk/android-ndk-r27c/ndk-build" -C src/main -j2
           rm -rf src/main/jniLibs
+          ndk_root="$PWD/buildscripts/sdk/android-ndk-r27c"
+          declare -A stl_triple_map=(
+            ["armeabi-v7a"]="arm-linux-androideabi"
+            ["arm64-v8a"]="aarch64-linux-android"
+            ["x86"]="i686-linux-android"
+            ["x86_64"]="x86_64-linux-android"
+          )
           for mapping in "${prefix_map[@]}"; do
             abi="${mapping##*:}"
             mkdir -p "src/main/jniLibs/$abi"
             cp -L -f src/main/native-libs/$abi/*.so "src/main/jniLibs/$abi/"
             cp -L -f "src/main/libs/$abi/libplayer.so" "src/main/jniLibs/$abi/"
+            stl_triple="${stl_triple_map[$abi]}"
+            stl_library="$(find "$ndk_root/toolchains/llvm/prebuilt/linux-x86_64" -type f -path "*/$stl_triple/*" -name libc++_shared.so -print -quit)"
+            if [[ -z "$stl_library" ]]; then
+              echo "Missing libc++_shared.so for $abi ($stl_triple)"
+              exit 1
+            fi
+            cp -L -f "$stl_library" "src/main/jniLibs/$abi/libc++_shared.so"
           done
           test -f src/main/jniLibs/arm64-v8a/libplayer.so
+          test -f src/main/jniLibs/arm64-v8a/libc++_shared.so
           test -f src/main/jniLibs/armeabi-v7a/libplayer.so
           test -f src/main/jniLibs/x86/libplayer.so
           test -f src/main/jniLibs/x86_64/libplayer.so
