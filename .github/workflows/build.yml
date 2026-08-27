@@ -58,6 +58,11 @@ jobs:
           set -euo pipefail
           echo "SHORT_SHA=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
           echo "COMMIT_COUNT=$(git rev-list --count HEAD)" >> "$GITHUB_ENV"
+          if [[ "$SELECTED_FLAVOR" == "store" ]]; then
+            echo "ARM64_ONLY=true" >> "$GITHUB_ENV"
+          else
+            echo "ARM64_ONLY=false" >> "$GITHUB_ENV"
+          fi
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
@@ -89,16 +94,22 @@ jobs:
           sudo apt-get install -y meson ninja-build nasm
           export IN_CI=1
           bash buildscripts/download.sh
-          for arch in armv7l arm64 x86 x86_64; do
+          if [[ "$ARM64_ONLY" == "true" ]]; then
+            source_arches=(arm64)
+            prefix_map=("arm64:arm64-v8a")
+          else
+            source_arches=(armv7l arm64 x86 x86_64)
+            prefix_map=(
+              "armv7l:armeabi-v7a"
+              "arm64:arm64-v8a"
+              "x86:x86"
+              "x86_64:x86_64"
+            )
+          fi
+          for arch in "${source_arches[@]}"; do
             bash buildscripts/buildall.sh --arch "$arch" mpv
           done
           rm -rf src/main/libs src/main/jniLibs src/main/native-libs src/main/native-headers
-          declare -a prefix_map=(
-            "armv7l:armeabi-v7a"
-            "arm64:arm64-v8a"
-            "x86:x86"
-            "x86_64:x86_64"
-          )
           for mapping in "${prefix_map[@]}"; do
             prefix_name="${mapping%%:*}"
             abi="${mapping##*:}"
@@ -106,7 +117,7 @@ jobs:
             destination="src/main/native-libs/$abi"
             header_destination="src/main/native-headers/$abi"
             mkdir -p "$destination" "$header_destination"
-            native_libs=(libswresample libavutil libavcodec libavformat libswscale libavfilter libavdevice libpostproc libmpv)
+            native_libs=(libswresample libavutil libavcodec libavformat libswscale libavfilter libavdevice libpostproc libxml2 libmpv)
             for library in "${native_libs[@]}"; do
               source_library="$source_prefix/lib/$library.so"
               if [[ ! -e "$source_library" ]]; then
@@ -165,7 +176,7 @@ jobs:
             ./gradlew "assembleFongmi${gradle_suffix}" --stacktrace --no-daemon --max-workers=2
           fi
           if [[ "$SELECTED_FLAVOR" == "store" ]]; then
-            ./gradlew "assembleStore${gradle_suffix}" --stacktrace --no-daemon --max-workers=2
+            ./gradlew -Parm64Only=true "assembleStore${gradle_suffix}" --stacktrace --no-daemon --max-workers=2
           fi
           if [[ "$SELECTED_FLAVOR" == "all" || "$SELECTED_FLAVOR" == "no_vulkan" ]]; then
             ./gradlew "assembleNoVulkan${gradle_suffix}" --stacktrace --no-daemon --max-workers=2
@@ -313,7 +324,7 @@ jobs:
 
           if [[ "$SELECTED_FLAVOR" == "store" ]]; then
             store_dir="app/build/outputs/apk/store/$BUILD_TYPE"
-            for abi in universal arm64-v8a armeabi-v7a x86 x86_64; do
+            for abi in universal arm64-v8a; do
               if ! compgen -G "$store_dir/app-store-${abi}-${BUILD_TYPE}*.apk" >/dev/null; then
                 echo "No store APK found for $abi"
                 find "$store_dir" -maxdepth 1 -type f -name '*.apk' -print || true

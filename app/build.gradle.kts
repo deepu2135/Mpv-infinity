@@ -2,7 +2,9 @@ import com.android.build.api.variant.FilterConfiguration
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 val enableX86 = project.findProperty("enableX86") != "false"
-val x86Abis = if (enableX86) listOf("x86", "x86_64") else emptyList()
+val arm64Only = project.findProperty("arm64Only") == "true"
+val x86Abis = if (enableX86 && !arm64Only) listOf("x86", "x86_64") else emptyList()
+val appAbis = if (arm64Only) listOf("arm64-v8a") else listOf("arm64-v8a", "armeabi-v7a") + x86Abis
 val universalOnlyDistributions = setOf("noVulkan", "fongmi")
 
 plugins {
@@ -35,7 +37,7 @@ android {
 
     externalNativeBuild {
       cmake {
-        abiFilters += listOf("arm64-v8a", "armeabi-v7a") + x86Abis
+        abiFilters += appAbis
       }
     }
   }
@@ -93,9 +95,13 @@ android {
     abi {
       isEnable = true
       reset()
-      include("armeabi-v7a", "arm64-v8a")
-      if (enableX86) {
-        include("x86", "x86_64")
+      if (arm64Only) {
+        include("arm64-v8a")
+      } else {
+        include("armeabi-v7a", "arm64-v8a")
+        if (enableX86) {
+          include("x86", "x86_64")
+        }
       }
       isUniversalApk = true
     }
