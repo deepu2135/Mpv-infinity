@@ -161,9 +161,11 @@ jobs:
           done
           test -f src/main/jniLibs/arm64-v8a/libplayer.so
           test -f src/main/jniLibs/arm64-v8a/libc++_shared.so
-          test -f src/main/jniLibs/armeabi-v7a/libplayer.so
-          test -f src/main/jniLibs/x86/libplayer.so
-          test -f src/main/jniLibs/x86_64/libplayer.so
+          if [[ "$ARM64_ONLY" != "true" ]]; then
+            test -f src/main/jniLibs/armeabi-v7a/libplayer.so
+            test -f src/main/jniLibs/x86/libplayer.so
+            test -f src/main/jniLibs/x86_64/libplayer.so
+          fi
 
       - name: Build selected APKs
         shell: bash
@@ -328,7 +330,11 @@ jobs:
 
           if [[ "$SELECTED_FLAVOR" == "store" ]]; then
             store_dir="app/build/outputs/apk/store/$BUILD_TYPE"
-            for abi in universal arm64-v8a; do
+            store_abis=(arm64-v8a)
+            if [[ "$ARM64_ONLY" != "true" ]]; then
+              store_abis=(universal arm64-v8a)
+            fi
+            for abi in "${store_abis[@]}"; do
               if ! compgen -G "$store_dir/app-store-${abi}-${BUILD_TYPE}*.apk" >/dev/null; then
                 echo "No store APK found for $abi"
                 find "$store_dir" -maxdepth 1 -type f -name '*.apk' -print || true
@@ -387,11 +393,11 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      - name: Upload store source-build APKs
+      - name: Upload store source-build arm64-v8a APK
         if: ${{ env.SELECTED_FLAVOR == 'store' }}
         uses: actions/upload-artifact@v4
         with:
-          name: mpv-infinity-store-debug-${{ env.SHORT_SHA }}
-          path: app/build/outputs/apk/store/debug/app-store-*-debug.apk
+          name: mpv-infinity-store-debug-arm64-v8a-${{ env.SHORT_SHA }}
+          path: app/build/outputs/apk/store/debug/app-store-arm64-v8a-debug.apk
           if-no-files-found: error
           retention-days: 7

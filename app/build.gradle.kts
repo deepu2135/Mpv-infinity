@@ -103,7 +103,7 @@ android {
           include("x86", "x86_64")
         }
       }
-      isUniversalApk = true
+      isUniversalApk = !arm64Only
     }
   }
 
