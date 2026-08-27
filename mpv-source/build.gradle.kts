@@ -11,6 +11,12 @@ android {
     consumerProguardFiles("consumer-rules.pro")
   }
 
+  buildTypes {
+    create("preview") {
+      initWith(getByName("release"))
+    }
+  }
+
   buildFeatures {
     buildConfig = true
   }
