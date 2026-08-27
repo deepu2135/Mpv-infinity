@@ -1453,7 +1453,8 @@ class PlayerViewModel : ViewModel(),
     //   500 ms – paused
     viewModelScope.launch(playbackStateDispatcher) {
       while (isActive) {
-        val media3Active = withContext(Dispatchers.Main.immediate) { host.isMedia3Active() }
+        val attachedHost = withContext(Dispatchers.Main.immediate) { hostReference.get() }
+        val media3Active = attachedHost?.isMedia3Active() == true
         if (!_isMpvCoreReady.value && !media3Active) {
           delay(250L)
           continue
@@ -1468,7 +1469,8 @@ class PlayerViewModel : ViewModel(),
         runCatching {
           val time =
             if (media3Active) {
-              (host.media3CurrentPositionMs().coerceAtLeast(0L) / 1000.0)
+              ((attachedHost?.media3CurrentPositionMs() ?: return@runCatching)
+                .coerceAtLeast(0L) / 1000.0)
             } else {
               PlaybackSession.getPropertyDouble("time-pos")
             }
@@ -1478,7 +1480,7 @@ class PlayerViewModel : ViewModel(),
               _precisePosition.value = posFloat
               updateLyricsActiveLine()
             }
-            val isPlaying = if (media3Active) host.media3IsPlaying() else paused != true
+            val isPlaying = if (media3Active) attachedHost?.media3IsPlaying() == true else paused != true
             maybeAutoSkipIntro(time, isPlaying)
           }
           if (!media3Active && audioTimelineActive) {
@@ -1487,7 +1489,7 @@ class PlayerViewModel : ViewModel(),
               _preciseDuration.value = currentDuration.toFloat()
             }
           } else if (media3Active) {
-            val currentDuration = host.media3DurationMs().takeIf { it > 0L }?.div(1000.0)
+            val currentDuration = attachedHost?.media3DurationMs()?.takeIf { it > 0L }?.div(1000.0)
             if (currentDuration != null && currentDuration.isFinite()) {
               _preciseDuration.value = currentDuration.toFloat()
             }
