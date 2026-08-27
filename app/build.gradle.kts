@@ -283,7 +283,10 @@ dependencies {
   implementation(libs.fsaf)
   implementation(libs.mediainfo.lib)
   implementation(libs.androidx.profileinstaller)
-  implementation(libs.google.cast.framework)
+  // Google Cast remains available in the original distribution flavors only.
+  "standardImplementation"(libs.google.cast.framework)
+  "noVulkanImplementation"(libs.google.cast.framework)
+  "fongmiImplementation"(libs.google.cast.framework)
 
   "standardImplementation"(files("libs/mpvlib.aar"))
   "noVulkanImplementation"(files("libs/mpvlib-no-vulkun.aar"))

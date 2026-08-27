@@ -732,7 +732,12 @@ object LibrariesScreen : Screen {
           color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
-        OPEN_SOURCE_LIBRARIES.forEach { library ->
+        OPEN_SOURCE_LIBRARIES
+          .filterNot { library ->
+            BuildConfig.FLAVOR == "store" &&
+              library.artifact == "com.google.android.gms:play-services-cast-framework"
+          }
+          .forEach { library ->
           Card(
             modifier =
               Modifier
