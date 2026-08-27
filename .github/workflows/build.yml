@@ -106,7 +106,7 @@ jobs:
             destination="src/main/native-libs/$abi"
             header_destination="src/main/native-headers/$abi"
             mkdir -p "$destination" "$header_destination"
-            native_libs=(libswresample libavutil libavcodec libavformat libswscale libavfilter libavdevice libmpv)
+            native_libs=(libswresample libavutil libavcodec libavformat libswscale libavfilter libavdevice libpostproc libmpv)
             for library in "${native_libs[@]}"; do
               source_library="$source_prefix/lib/$library.so"
               if [[ ! -e "$source_library" ]]; then
