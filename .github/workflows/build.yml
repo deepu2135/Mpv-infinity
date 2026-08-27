@@ -74,15 +74,12 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Validate store build is Debug-only
+      - name: Validate store build mode
         if: ${{ env.SELECTED_FLAVOR == 'store' }}
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$BUILD_TYPE" != "debug" ]]; then
-            echo "The source-built store flavor is Debug-only until device validation is complete."
-            exit 1
-          fi
+          echo "Building the source-built store ${BUILD_TYPE} arm64-v8a candidate."
 
       - name: Build source MPV native libraries for store flavor
         if: ${{ env.SELECTED_FLAVOR == 'store' }}
@@ -197,11 +194,15 @@ jobs:
           test -x "$apksigner"
 
           if [[ -z "${{ secrets.SIGNING_KEYSTORE }}" ]]; then
-            if [[ "$BUILD_TYPE" == "release" ]]; then
-              echo "SIGNING_KEYSTORE is required for a stable release build."
+            if [[ "$BUILD_TYPE" == "release" && "$SELECTED_FLAVOR" != "store" ]]; then
+              echo "SIGNING_KEYSTORE is required for a public stable release build."
               exit 1
             fi
-            echo "SIGNING_KEYSTORE is unavailable (expected for untrusted fork PRs); keeping debug CI APKs unsigned."
+            if [[ "$BUILD_TYPE" == "release" && "$SELECTED_FLAVOR" == "store" ]]; then
+              echo "SIGNING_KEYSTORE is unavailable; keeping the private store release candidate unsigned for F-Droid-side signing."
+            else
+              echo "SIGNING_KEYSTORE is unavailable (expected for untrusted fork PRs); keeping debug CI APKs unsigned."
+            fi
             exit 0
           fi
 
@@ -397,7 +398,7 @@ jobs:
         if: ${{ env.SELECTED_FLAVOR == 'store' }}
         uses: actions/upload-artifact@v4
         with:
-          name: mpv-infinity-store-debug-arm64-v8a-${{ env.SHORT_SHA }}
-          path: app/build/outputs/apk/store/debug/app-store-arm64-v8a-debug.apk
+          name: mpv-infinity-store-${{ env.BUILD_TYPE }}-arm64-v8a-${{ env.SHORT_SHA }}
+          path: app/build/outputs/apk/store/${{ env.BUILD_TYPE }}/app-store-arm64-v8a-${{ env.BUILD_TYPE }}*.apk
           if-no-files-found: error
           retention-days: 7
