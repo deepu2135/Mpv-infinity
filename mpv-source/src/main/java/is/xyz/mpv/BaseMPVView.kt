@@ -17,7 +17,7 @@ abstract class BaseMPVView(context: Context, attrs: AttributeSet) :
         for (option in arrayOf("gpu-shader-cache-dir", "icc-cache-dir")) {
             MPVLib.setOptionString(option, cacheDir)
         }
-        initOptions(vo)
+        initOptions()
         MPVLib.init()
         postInitOptions()
         MPVLib.setOptionString("force-window", "no")
@@ -31,7 +31,7 @@ abstract class BaseMPVView(context: Context, attrs: AttributeSet) :
         MPVLib.destroy()
     }
 
-    protected abstract fun initOptions(vo: String)
+    protected abstract fun initOptions()
     protected abstract fun postInitOptions()
     protected abstract fun observeProperties()
 

@@ -151,7 +151,7 @@ public final class MPVLib {
         void eventProperty(@NonNull String property, double value);
         void eventProperty(@NonNull String property, @NonNull MPVNode value);
         void event(int eventId, @NonNull MPVNode data);
-        void efEvent(String error);
+        default void efEvent(String error) { }
     }
 
     public interface LogObserver {
