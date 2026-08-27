@@ -25,8 +25,9 @@ android {
     applicationId = "app.infinity.mpvz"
     minSdk = 26
     targetSdk = 36
-    versionCode = 150
-    versionName = "1.0.3"
+    // Separate F-Droid store line; public GitHub v1.0.3 remains on main.
+    versionCode = 151
+    versionName = "1.0.4"
 
     vectorDrawables {
       useSupportLibrary = true
