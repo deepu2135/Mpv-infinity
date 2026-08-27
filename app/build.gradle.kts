@@ -19,7 +19,7 @@ plugins {
 android {
   namespace = "app.infinity.mpvz"
   compileSdk = 37
-  ndkVersion = "27.3.13750724"
+  ndkVersion = "27.2.12479018"
 
   defaultConfig {
     applicationId = "app.infinity.mpvz"
