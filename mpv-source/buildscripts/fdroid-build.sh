@@ -7,6 +7,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 . ./include/depinfo.sh
+cores=${cores:-2}
+ndk_triple=""
 . ./include/path.sh
 
 : "${ANDROID_NDK_ROOT:=$SCRIPT_DIR/sdk/android-ndk-${v_ndk}}"
@@ -25,10 +27,11 @@ if [[ ! -f "$prefix/lib/libmpv.so" ]]; then
   exit 1
 fi
 
-app_root="$SCRIPT_DIR/../.."
-native_libs="$app_root/app/src/main/native-libs/arm64-v8a"
-native_headers="$app_root/app/src/main/native-headers/arm64-v8a"
-jni_libs="$app_root/app/src/main/jniLibs/arm64-v8a"
+mpv_root="$SCRIPT_DIR/.."
+project_root="$mpv_root/.."
+native_libs="$mpv_root/src/main/native-libs/arm64-v8a"
+native_headers="$mpv_root/src/main/native-headers/arm64-v8a"
+jni_libs="$mpv_root/src/main/jniLibs/arm64-v8a"
 rm -rf "$native_libs" "$native_headers" "$jni_libs"
 mkdir -p "$native_libs" "$native_headers" "$jni_libs"
 
@@ -47,11 +50,11 @@ done
 cp -a "$prefix/include/." "$native_headers/"
 
 # Link the JNI bridge against the staged source-built libraries for one ABI.
-"$ANDROID_NDK_ROOT/ndk-build" -C "$app_root/mpv-source/src/main" \
+"$ANDROID_NDK_ROOT/ndk-build" -C "$mpv_root/src/main" \
   APP_ABI=arm64-v8a APP_STL=c++_shared -j2
 
 # Package the JNI bridge and all reviewed source-built libraries into the app.
-cp -L -f "$app_root/mpv-source/src/main/libs/arm64-v8a/libplayer.so" "$jni_libs/"
+cp -L -f "$mpv_root/src/main/libs/arm64-v8a/libplayer.so" "$jni_libs/"
 for library in "$native_libs"/*.so; do
   cp -L -f "$library" "$jni_libs/"
 done
