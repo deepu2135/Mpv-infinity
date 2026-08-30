@@ -186,6 +186,7 @@ fun MusicLibraryContent(
   val isLoading by musicViewModel.isLoading.collectAsState()
 
   val songs by musicViewModel.filteredSongs.collectAsState()
+  val audiobooks by musicViewModel.filteredAudiobooks.collectAsState()
   val albums by musicViewModel.filteredAlbums.collectAsState()
   val artists by musicViewModel.filteredArtists.collectAsState()
   val playlists by musicViewModel.playlists.collectAsState()
@@ -226,6 +227,15 @@ fun MusicLibraryContent(
     onOperationComplete = { musicViewModel.scanLibrary(context) }
   )
 
+  val audiobookSelectionManager = rememberSelectionManager(
+    items = audiobooks,
+    getId = { it.id },
+    onDeleteItems = { selectedAudiobooks, _ ->
+      musicViewModel.deleteSongs(context, selectedAudiobooks)
+    },
+    onOperationComplete = { musicViewModel.scanLibrary(context) }
+  )
+
   val albumSelectionManager = rememberSelectionManager(
     items = albums,
     getId = { it.id },
@@ -249,6 +259,7 @@ fun MusicLibraryContent(
 
   val activeSelectionManager = when (selectedTab) {
     MusicTab.SONGS -> songSelectionManager
+    MusicTab.AUDIOBOOKS -> audiobookSelectionManager
     MusicTab.ALBUMS -> albumSelectionManager
     MusicTab.ARTISTS -> artistSelectionManager
     MusicTab.PLAYLISTS -> playlistSelectionManager
@@ -292,6 +303,7 @@ fun MusicLibraryContent(
       pagerState.animateScrollToPage(targetIndex)
     }
     songSelectionManager.clear()
+    audiobookSelectionManager.clear()
     albumSelectionManager.clear()
     artistSelectionManager.clear()
     playlistSelectionManager.clear()
@@ -329,6 +341,7 @@ fun MusicLibraryContent(
 
   val totalCount = when (selectedTab) {
     MusicTab.SONGS -> songs.size
+    MusicTab.AUDIOBOOKS -> audiobooks.size
     MusicTab.ALBUMS -> albums.size
     MusicTab.ARTISTS -> artists.size
     MusicTab.PLAYLISTS -> playlists.size
@@ -398,7 +411,7 @@ fun MusicLibraryContent(
               onInvertSelection = { activeSelectionManager.invertSelection() },
               onDeselectAll = { activeSelectionManager.clear() },
               onDeleteClick = null,
-              onShareClick = if (selectedTab == MusicTab.SONGS) {
+              onShareClick = if (selectedTab == MusicTab.SONGS || selectedTab == MusicTab.AUDIOBOOKS) {
                 {
                   @Suppress("UNCHECKED_CAST")
                   val selected = activeSelectionManager.getSelectedItems() as List<MusicSong>
@@ -410,7 +423,7 @@ fun MusicLibraryContent(
               onPlayClick = {
                 val items = activeSelectionManager.getSelectedItems()
                 when (selectedTab) {
-                  MusicTab.SONGS -> {
+                  MusicTab.SONGS, MusicTab.AUDIOBOOKS -> {
                     @Suppress("UNCHECKED_CAST")
                     musicViewModel.playAllSongs(context, items as List<MusicSong>, shuffle = false)
                   }
@@ -452,7 +465,7 @@ fun MusicLibraryContent(
                 {
                   val items = activeSelectionManager.getSelectedItems()
                   val videosToQueue = when (selectedTab) {
-                    MusicTab.SONGS -> (items as List<MusicSong>).map { it.toVideo() }
+                    MusicTab.SONGS, MusicTab.AUDIOBOOKS -> (items as List<MusicSong>).map { it.toVideo() }
                     MusicTab.ALBUMS -> {
                       val selected = items as List<MusicAlbum>
                       songs.filter { song -> selected.any { album -> song.albumId == album.id || song.album.equals(album.title, ignoreCase = true) } }.map { it.toVideo() }
@@ -678,6 +691,26 @@ fun MusicLibraryContent(
                 selectionManager = songSelectionManager
               )
 
+              MusicTab.AUDIOBOOKS -> SongsTabContent(
+                songs = audiobooks,
+                viewMode = viewMode,
+                recentlyPlayedFilePath = recentlyPlayedFilePath,
+                isPlaybackActive = isPlaybackActive,
+                coverArtSizeDp = coverArtSizeDp,
+                onSongClick = { song ->
+                  if (audiobookSelectionManager.isInSelectionMode) {
+                    audiobookSelectionManager.toggle(song)
+                  } else {
+                    musicViewModel.playSong(context, song, audiobooks)
+                  }
+                },
+                onSongLongClick = { song ->
+                  audiobookSelectionManager.toggle(song)
+                },
+                selectionManager = audiobookSelectionManager,
+                emptyPlaceholder = "No audiobooks found"
+              )
+
               MusicTab.ALBUMS -> AlbumsTabContent(
                 albums = albums,
                 viewMode = viewMode,
@@ -885,9 +918,9 @@ fun MusicLibraryContent(
         // Multi Selection Delete Confirmation Dialog
         if (showDeleteSelectedDialog) {
           val count = activeSelectionManager.selectedCount
-          val itemType = if (selectedTab == MusicTab.SONGS) "song" else "playlist"
+          val itemType = if (selectedTab == MusicTab.SONGS || selectedTab == MusicTab.AUDIOBOOKS) "audio file" else "playlist"
           val itemNames = when (selectedTab) {
-            MusicTab.SONGS -> {
+            MusicTab.SONGS, MusicTab.AUDIOBOOKS -> {
               @Suppress("UNCHECKED_CAST")
               (activeSelectionManager.getSelectedItems() as List<MusicSong>).map { it.title }
             }
@@ -1141,7 +1174,7 @@ fun MusicLibraryContent(
           onAddToPlaylistClick = @Suppress("UNCHECKED_CAST") {
             val items = activeSelectionManager.getSelectedItems()
             val videosToAdd = when (selectedTab) {
-              MusicTab.SONGS -> (items as List<MusicSong>).map { it.toVideo() }
+              MusicTab.SONGS, MusicTab.AUDIOBOOKS -> (items as List<MusicSong>).map { it.toVideo() }
               MusicTab.ALBUMS -> {
                 val selAlbums = items as List<MusicAlbum>
                 songs.filter { s -> selAlbums.any { a -> s.albumId == a.id || s.album.equals(a.title, ignoreCase = true) } }.map { it.toVideo() }
@@ -1160,7 +1193,7 @@ fun MusicLibraryContent(
           onAddToTemporaryQueueClick = @Suppress("UNCHECKED_CAST") {
             val items = activeSelectionManager.getSelectedItems()
             val videosToQueue = when (selectedTab) {
-              MusicTab.SONGS -> (items as List<MusicSong>).map { it.toVideo() }
+              MusicTab.SONGS, MusicTab.AUDIOBOOKS -> (items as List<MusicSong>).map { it.toVideo() }
               MusicTab.ALBUMS -> {
                 val selAlbums = items as List<MusicAlbum>
                 songs.filter { s -> selAlbums.any { a -> s.albumId == a.id || s.album.equals(a.title, ignoreCase = true) } }.map { it.toVideo() }
@@ -1177,7 +1210,7 @@ fun MusicLibraryContent(
           showCopy = false,
           showMove = false,
           showRename = false,
-          showDelete = selectedTab == MusicTab.SONGS || selectedTab == MusicTab.PLAYLISTS,
+          showDelete = selectedTab == MusicTab.SONGS || selectedTab == MusicTab.AUDIOBOOKS || selectedTab == MusicTab.PLAYLISTS,
           showAddToPlaylist = selectedTab != MusicTab.PLAYLISTS && selectedTab != MusicTab.FOLDERS,
           showAddToTemporaryQueue = selectedTab != MusicTab.PLAYLISTS && selectedTab != MusicTab.FOLDERS,
           modifier = Modifier.align(Alignment.BottomCenter)
@@ -1282,10 +1315,11 @@ private fun SongsTabContent(
   coverArtSizeDp: Int = 48,
   onSongClick: (MusicSong) -> Unit,
   onSongLongClick: (MusicSong) -> Unit,
-  selectionManager: app.infinity.mpvz.ui.browser.selection.SelectionManager<MusicSong, Long>
+  selectionManager: app.infinity.mpvz.ui.browser.selection.SelectionManager<MusicSong, Long>,
+  emptyPlaceholder: String = "No songs found"
 ) {
   if (songs.isEmpty()) {
-    EmptyMusicState(text = "No songs found")
+    EmptyMusicState(text = emptyPlaceholder)
     return
   }
 

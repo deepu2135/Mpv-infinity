@@ -376,6 +376,20 @@ class PlayerActivity :
     return extension in FileTypeUtils.AUDIO_EXTENSIONS
   }
 
+  fun isCurrentMediaAudiobook(): Boolean {
+    if (intent.getBooleanExtra("is_audiobook", false)) return true
+    val candidates = sequenceOf(fileName, currentPlayableUri, currentPlaybackItem()?.playableUri, currentPlaybackItem()?.title).filterNotNull().toList()
+    for (candidate in candidates) {
+      val lower = candidate.lowercase()
+      val ext = lower.substringBefore('?').substringAfterLast('.')
+      if (ext in setOf("m4b", "aax", "aa")) return true
+      if (lower.contains("/audiobook") || lower.contains("/audio book") || lower.contains("/audio_book") || lower.contains("/audible/")) return true
+      if (lower.contains("audiobook") || lower.contains("audio book")) return true
+    }
+    if (viewModel.chapters.value.isNotEmpty() && (viewModel.duration ?: 0) > 600) return true
+    return false
+  }
+
   private fun isAudioPlaybackItem(item: PlaybackItem): Boolean {
     // An explicit audio launch is authoritative even for shared containers such as MKV whose
     // resolver MIME may be video/* despite the requested track being audio-only.
@@ -2056,7 +2070,11 @@ class PlayerActivity :
       }
     }
 
-    if (startsAtZero || resumePositionMs > 0L || !playerPreferences.savePositionOnQuit.get()) {
+    val isAudio = viewModel.isAudioOnly.value || isCurrentMediaKnownAudio()
+    val isAudiobook = isCurrentMediaAudiobook()
+    val shouldResume = if (isAudio) isAudiobook else playerPreferences.savePositionOnQuit.get()
+
+    if (startsAtZero || resumePositionMs > 0L || !shouldResume) {
       startMedia3(resumePositionMs)
     } else {
       lifecycleScope.launch(Dispatchers.IO) {
@@ -5267,11 +5285,15 @@ class PlayerActivity :
         val oldState = playbackStateRepository.getVideoDataByTitle(snapshot.mediaIdentifier)
         Log.d(TAG, "Saving playback state for: ${snapshot.mediaTitle} (identifier: ${snapshot.mediaIdentifier})")
 
+        val isAudio = viewModel.isAudioOnly.value || isCurrentMediaKnownAudio()
+        val isAudiobook = isCurrentMediaAudiobook()
+        val savePosition = if (isAudio) isAudiobook else playerPreferences.savePositionOnQuit.get()
+
         val playbackState =
           PlaybackStatePersistence.buildEntity(
             oldState = oldState,
             snapshot = snapshot,
-            savePositionOnQuit = playerPreferences.savePositionOnQuit.get(),
+            savePositionOnQuit = savePosition,
             watchedThreshold = browserPreferences.watchedThreshold.get(),
           )
         playbackStateRepository.upsert(playbackState)
@@ -5509,11 +5531,13 @@ class PlayerActivity :
     PlaybackSession.setPropertyDouble("video-zoom", state.videoZoom.toDouble())
     viewModel.setVideoZoom(state.videoZoom)
 
+    val isAudio = viewModel.isAudioOnly.value || isCurrentMediaKnownAudio()
+    val isAudiobook = isCurrentMediaAudiobook()
+    val shouldResume = if (isAudio) isAudiobook else playerPreferences.savePositionOnQuit.get()
+
     if (!pendingQueueTransitionStartAtZero &&
-      playerPreferences.savePositionOnQuit.get() &&
-      state.lastPosition != 0 &&
-      !viewModel.isAudioOnly.value &&
-      !isCurrentMediaKnownAudio()
+      shouldResume &&
+      state.lastPosition != 0
     ) {
       if (playbackEngine == PlaybackEngine.MEDIA3 && cachedMedia3State.playbackState != Player.STATE_IDLE) {
         withContext(Dispatchers.Main.immediate) {

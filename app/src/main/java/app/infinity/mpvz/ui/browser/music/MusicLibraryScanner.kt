@@ -101,6 +101,21 @@ object MusicLibraryScanner {
           val contentUri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
           val albumArtUri = if (albumId > 0) ContentUris.withAppendedId(ALBUM_ART_BASE_URI, albumId) else null
 
+          val isAudiobookCol = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            cursor.getColumnIndex(MediaStore.Audio.Media.IS_AUDIOBOOK)
+          } else {
+            -1
+          }
+          val isAudiobookMediaStore = if (isAudiobookCol >= 0) cursor.getInt(isAudiobookCol) == 1 else false
+          val isAudiobook = isAudiobookFile(
+            path = path,
+            title = title,
+            album = album,
+            artist = artist,
+            durationMs = duration,
+            isAudiobookMediaStore = isAudiobookMediaStore,
+          )
+
           songs.add(
             MusicSong(
               id = id,
@@ -115,7 +130,8 @@ object MusicLibraryScanner {
               trackNumber = track,
               year = year,
               albumArtUri = albumArtUri,
-              size = size
+              size = size,
+              isAudiobook = isAudiobook,
             )
           )
         }
@@ -125,6 +141,29 @@ object MusicLibraryScanner {
     }
 
     songs
+  }
+
+  fun isAudiobookFile(
+    path: String,
+    title: String,
+    album: String,
+    artist: String,
+    durationMs: Long,
+    isAudiobookMediaStore: Boolean = false,
+  ): Boolean {
+    if (isAudiobookMediaStore) return true
+    val ext = path.substringAfterLast('.', "").lowercase()
+    if (ext in setOf("m4b", "aax", "aa")) return true
+    val lowerPath = path.lowercase()
+    if (lowerPath.contains("/audiobook") || lowerPath.contains("/audio book") || lowerPath.contains("/audio_book") || lowerPath.contains("/audible/")) return true
+    val lowerAlbum = album.lowercase()
+    if (lowerAlbum.contains("audiobook") || lowerAlbum.contains("audio book") || lowerAlbum.contains("spoken word")) return true
+    val lowerArtist = artist.lowercase()
+    if (lowerArtist.contains("audiobook") || lowerArtist.contains("narrator") || lowerArtist.contains("author")) return true
+    val lowerTitle = title.lowercase()
+    if (lowerTitle.contains("audiobook") || lowerTitle.contains("audio book")) return true
+    if (durationMs > 900_000L && (lowerPath.contains("/books/") || lowerPath.contains("/book/"))) return true
+    return false
   }
 
   /**

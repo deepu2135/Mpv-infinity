@@ -129,6 +129,33 @@ class MusicLibraryViewModel : ViewModel(), KoinComponent {
     if (order == MusicSortOrder.DESCENDING) sorted.reversed() else sorted
   }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+  val audiobooks: StateFlow<List<MusicSong>> = _songs
+    .map { list -> list.filter { it.isAudiobook } }
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+  val filteredAudiobooks: StateFlow<List<MusicSong>> = combine(
+    _songs, _searchQuery, sortField, sortOrder
+  ) { songList, query, field, order ->
+    var result = songList.filter { it.isAudiobook }
+    if (query.isNotBlank()) {
+      val q = query.trim().lowercase()
+      result = result.filter {
+        it.title.lowercase().contains(q) ||
+          it.artist.lowercase().contains(q) ||
+          it.album.lowercase().contains(q)
+      }
+    }
+    val sorted = when (field) {
+      MusicSortField.TITLE -> result.sortedBy { it.title.lowercase() }
+      MusicSortField.ARTIST -> result.sortedBy { it.artist.lowercase() }
+      MusicSortField.ALBUM -> result.sortedBy { it.album.lowercase() }
+      MusicSortField.DURATION -> result.sortedBy { it.durationMs }
+      MusicSortField.DATE_ADDED -> result.sortedBy { it.dateAdded }
+      MusicSortField.TRACK_COUNT, MusicSortField.YEAR -> result.sortedBy { it.year }
+    }
+    if (order == MusicSortOrder.DESCENDING) sorted.reversed() else sorted
+  }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
   val filteredAlbums: StateFlow<List<MusicAlbum>> = combine(
     _albums, _searchQuery, sortField, sortOrder
   ) { albumList, query, field, order ->
@@ -304,6 +331,7 @@ class MusicLibraryViewModel : ViewModel(), KoinComponent {
       putExtra("launch_source", "music_library")
       putExtra("media_library_audio", true)
       putExtra("is_audio", true)
+      putExtra("is_audiobook", song.isAudiobook)
       putExtra("title", song.title)
     }
     context.startActivity(intent)
@@ -331,6 +359,7 @@ class MusicLibraryViewModel : ViewModel(), KoinComponent {
       putExtra("launch_source", if (shuffle) "music_shuffle" else "music_play_all")
       putExtra("media_library_audio", true)
       putExtra("is_audio", true)
+      putExtra("is_audiobook", firstSong.isAudiobook)
       putExtra("title", firstSong.title)
     }
     context.startActivity(intent)

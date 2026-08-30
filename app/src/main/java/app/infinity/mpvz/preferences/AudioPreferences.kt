@@ -34,15 +34,15 @@ class AudioPreferences(
   val audioAmbientMode = preferenceStore.getBoolean("audio_ambient_mode", true)
   val enabledMusicTabs = preferenceStore.getStringSet(
     "enabled_music_tabs",
-    setOf("SONGS", "ALBUMS", "ARTISTS", "PLAYLISTS", "FOLDERS"),
+    setOf("SONGS", "FOLDERS", "AUDIOBOOKS", "ALBUMS", "ARTISTS", "PLAYLISTS"),
   )
   val musicTabOrder = preferenceStore.getObject(
     key = "music_tab_order",
-    defaultValue = listOf("SONGS", "ALBUMS", "ARTISTS", "PLAYLISTS", "FOLDERS"),
+    defaultValue = listOf("SONGS", "FOLDERS", "AUDIOBOOKS", "ALBUMS", "ARTISTS", "PLAYLISTS"),
     serializer = { list -> list.joinToString(",") },
     deserializer = { str ->
       val parsed = str.split(",").map { it.trim() }.filter { it.isNotEmpty() }
-      val missing = listOf("SONGS", "ALBUMS", "ARTISTS", "PLAYLISTS", "FOLDERS") - parsed.toSet()
+      val missing = listOf("SONGS", "FOLDERS", "AUDIOBOOKS", "ALBUMS", "ARTISTS", "PLAYLISTS") - parsed.toSet()
       parsed + missing
     },
   )
