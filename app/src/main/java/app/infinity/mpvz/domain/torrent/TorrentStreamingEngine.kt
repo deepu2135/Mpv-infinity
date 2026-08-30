@@ -349,18 +349,7 @@ class TorrentStreamingEngine(
           setMaxMetadataSize(MAX_METADATA_BYTES.toInt())
           setEnableDht(true)
           setEnableLsd(true)
-          setEnableUpnp(true)
-          setEnableNatpmp(true)
           setDhtBootstrapNodes(DHT_BOOTSTRAP_NODES)
-          setConnectionsLimit(300)
-          setConnectionSpeed(200)
-          setTorrentConnectBoost(80)
-          setMaxPeerlistSize(4000)
-          setPeerConnectTimeout(2)
-          setRequestTimeout(3)
-          setPieceTimeout(4)
-          setInactivityTimeout(10)
-          setAioThreads(4)
         }
       startedSession.start(SessionParams(settings))
       ensureCurrent(startGeneration)
@@ -479,7 +468,6 @@ class TorrentStreamingEngine(
         runCatching { handle.addTracker(AnnounceEntry(tracker)) }
       }
       handle.forceReannounce()
-      handle.forceDhtAnnounce()
       val info = waitForMetadata(handle, startGeneration, failure)
       if (!info.hasV1()) throw streamError("BitTorrent v2-only torrents are not supported yet.")
       if (!info.infoHash().toHex().equals(parsed.infoHash, ignoreCase = true)) {
@@ -527,7 +515,6 @@ class TorrentStreamingEngine(
         }
       }
       handle.forceReannounce()
-      handle.forceDhtAnnounce()
       if (info.isPrivate && endpoints.trackers.isEmpty()) {
         throw streamError("Private torrent metadata does not contain a supported tracker.")
       }
