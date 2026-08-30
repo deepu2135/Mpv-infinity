@@ -378,6 +378,7 @@ class PlayerActivity :
 
   fun isCurrentMediaAudiobook(): Boolean {
     if (intent.getBooleanExtra("is_audiobook", false)) return true
+    if (viewModel.chapters.value.isNotEmpty()) return true
     val candidates = sequenceOf(fileName, currentPlayableUri, currentPlaybackItem()?.playableUri, currentPlaybackItem()?.title).filterNotNull().toList()
     for (candidate in candidates) {
       val lower = candidate.lowercase()
@@ -386,7 +387,6 @@ class PlayerActivity :
       if (lower.contains("/audiobook") || lower.contains("/audio book") || lower.contains("/audio_book") || lower.contains("/audible/")) return true
       if (lower.contains("audiobook") || lower.contains("audio book")) return true
     }
-    if (viewModel.chapters.value.isNotEmpty() && (viewModel.duration ?: 0) > 600) return true
     return false
   }
 
@@ -998,6 +998,19 @@ class PlayerActivity :
           mediaPlaybackService?.setChapters(
             chapterNodes,
           )
+          if (chapterNodes.isNotEmpty() && (isCurrentMediaKnownAudio() || viewModel.isAudioOnly.value)) {
+            val item = activePlaybackItem ?: media3ActiveItem
+            if (item != null && (viewModel.pos ?: 0) <= 2 && !pendingQueueTransitionStartAtZero) {
+              val savedPositionMs = withContext(Dispatchers.IO) { persistedPlaybackPositionMs(item) }
+              if (savedPositionMs > 2000L && (viewModel.pos ?: 0) <= 2) {
+                if (playbackEngine == PlaybackEngine.MEDIA3) {
+                  media3PlaybackController.seekTo(savedPositionMs, fast = false)
+                } else {
+                  PlaybackSession.setPropertyInt("time-pos", (savedPositionMs / 1000L).toInt())
+                }
+              }
+            }
+          }
         }
     }
 
@@ -2072,16 +2085,18 @@ class PlayerActivity :
 
     val isAudio = viewModel.isAudioOnly.value || isCurrentMediaKnownAudio()
     val isAudiobook = isCurrentMediaAudiobook()
-    val shouldResume = if (isAudio) isAudiobook else playerPreferences.savePositionOnQuit.get()
+    val hasChapters = viewModel.chapters.value.isNotEmpty()
+    val shouldResume = if (isAudio) (isAudiobook || hasChapters) else playerPreferences.savePositionOnQuit.get()
 
-    if (startsAtZero || resumePositionMs > 0L || !shouldResume) {
+    if (startsAtZero || resumePositionMs > 0L) {
       startMedia3(resumePositionMs)
     } else {
       lifecycleScope.launch(Dispatchers.IO) {
         val savedPositionMs = persistedPlaybackPositionMs(item)
+        val allowResume = if (isAudio) (shouldResume || savedPositionMs > 0L) else shouldResume
         withContext(Dispatchers.Main.immediate) {
           if (playbackEngine == PlaybackEngine.MEDIA3 && media3ItemId == item.stableId) {
-            startMedia3(savedPositionMs)
+            startMedia3(if (allowResume) savedPositionMs else 0L)
           }
         }
       }
@@ -5287,7 +5302,8 @@ class PlayerActivity :
 
         val isAudio = viewModel.isAudioOnly.value || isCurrentMediaKnownAudio()
         val isAudiobook = isCurrentMediaAudiobook()
-        val savePosition = if (isAudio) isAudiobook else playerPreferences.savePositionOnQuit.get()
+        val hasChapters = viewModel.chapters.value.isNotEmpty()
+        val savePosition = if (isAudio) (isAudiobook || hasChapters) else playerPreferences.savePositionOnQuit.get()
 
         val playbackState =
           PlaybackStatePersistence.buildEntity(
@@ -5533,7 +5549,8 @@ class PlayerActivity :
 
     val isAudio = viewModel.isAudioOnly.value || isCurrentMediaKnownAudio()
     val isAudiobook = isCurrentMediaAudiobook()
-    val shouldResume = if (isAudio) isAudiobook else playerPreferences.savePositionOnQuit.get()
+    val hasChapters = viewModel.chapters.value.isNotEmpty()
+    val shouldResume = if (isAudio) (isAudiobook || hasChapters || state.lastPosition > 0) else playerPreferences.savePositionOnQuit.get()
 
     if (!pendingQueueTransitionStartAtZero &&
       shouldResume &&
