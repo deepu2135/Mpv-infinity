@@ -811,8 +811,7 @@ class PlayerActivity :
 
     val installedPreparedPlaybackQueue = installPreparedPlaybackQueue(intent)
     val preparedPlaybackQueue =
-      playlist.isEmpty() &&
-        (installedPreparedPlaybackQueue || restorePreparedPlaybackQueue(intent))
+      installedPreparedPlaybackQueue || (playlist.isEmpty() && restorePreparedPlaybackQueue(intent))
 
     var restoredSavedPlaylistItem = false
     if (playlist.isNotEmpty()) {
@@ -3088,6 +3087,18 @@ class PlayerActivity :
           isExplicitQueue = launch.isExplicitQueue,
           isM3u = launch.isM3u,
         )
+        playlistId = null
+        playlistItems = emptyList()
+        playlistEntity = null
+        isM3uPlaylist = launch.isM3u
+        playlist = launch.items.map { item -> Uri.parse(item.originalUri) }
+        playlistIndex = launch.currentIndex
+        playlistWindowOffset = 0
+        playlistTotalCount = playlist.size
+        networkPlaylistPaths = launch.items.map { item -> item.networkSource?.relativePath.orEmpty() }
+        networkPlaylistTitles = launch.items.map { item -> item.title.orEmpty() }
+        networkPlaylistHeaders = launch.items.map(PlaybackItem::headers)
+        networkPlaylistConnectionId = launch.items.getOrNull(launch.currentIndex)?.networkSource?.connectionId ?: -1L
         true
       }
       PreparedPlaybackLaunchResult.Missing,
@@ -4334,8 +4345,8 @@ class PlayerActivity :
    */
   override fun refreshCurrentFolderQueue() {
     val queueState = PlaybackSession.queue.value
-    if (queueState.isTemporaryQueue) {
-      Log.d(TAG, "Skipping folder queue refresh for temporary queue: ${queueState.items.size} items")
+    if (queueState.isTemporaryQueue || queueState.isExplicitQueue || isKnownAudioLaunch(intent) || intent.getBooleanExtra("media_library_audio", false)) {
+      Log.d(TAG, "Skipping folder queue refresh for explicit/audio queue: ${queueState.items.size} items")
       return
     }
     // The Activity playlist can be stale or singleton after an external file-manager launch.
@@ -4370,6 +4381,12 @@ class PlayerActivity :
    * @param index The index of the playlist item to play
    */
   override fun playQueueItem(index: Int) {
+    val queueItems = PlaybackSession.queue.value.items
+    if (playlist.isEmpty() && queueItems.isNotEmpty()) {
+      playlist = queueItems.map { Uri.parse(it.originalUri) }
+      playlistIndex = index.coerceIn(0, queueItems.lastIndex)
+      playlistTotalCount = playlist.size
+    }
     if (index in playlist.indices) {
       // An explicit playlist-row tap is authoritative and should bypass the rapid-skip debounce.
       pendingQueueNavigationJob?.cancel()
@@ -5847,8 +5864,7 @@ class PlayerActivity :
 
     val installedPreparedPlaybackQueue = installPreparedPlaybackQueue(intent)
     val preparedPlaybackQueue =
-      playlistFromIntent.isEmpty() &&
-        (installedPreparedPlaybackQueue || restorePreparedPlaybackQueue(intent))
+      installedPreparedPlaybackQueue || (playlistFromIntent.isEmpty() && restorePreparedPlaybackQueue(intent))
 
     if (preparedPlaybackQueue) {
       viewModel.refreshPlaylistItems()
@@ -7559,6 +7575,12 @@ class PlayerActivity :
    * Load a playlist item by index
    */
   private fun loadPlaylistItem(index: Int) {
+    val queueItems = PlaybackSession.queue.value.items
+    if (playlist.isEmpty() && queueItems.isNotEmpty()) {
+      playlist = queueItems.map { Uri.parse(it.originalUri) }
+      playlistIndex = index.coerceIn(0, queueItems.lastIndex)
+      playlistTotalCount = playlist.size
+    }
     // All items are loaded - just validate index and load directly
     if (index < 0 || index >= playlist.size) {
       Log.e(TAG, "Invalid playlist index: $index (playlist size: ${playlist.size})")
@@ -7574,6 +7596,12 @@ class PlayerActivity :
     index: Int,
     saveCurrentPlaybackState: Boolean = true,
   ) {
+    val queueItems = PlaybackSession.queue.value.items
+    if (playlist.isEmpty() && queueItems.isNotEmpty()) {
+      playlist = queueItems.map { Uri.parse(it.originalUri) }
+      playlistIndex = index.coerceIn(0, queueItems.lastIndex)
+      playlistTotalCount = playlist.size
+    }
     if (index < 0 || index >= playlist.size) {
       Log.e(TAG, "Invalid playlist index: $index (playlist size: ${playlist.size})")
       return

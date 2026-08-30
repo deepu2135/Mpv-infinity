@@ -5476,7 +5476,7 @@ class PlayerViewModel : ViewModel(),
 
   fun getPlaylistData(): List<app.infinity.mpvz.ui.player.controls.components.sheets.PlaylistItem>? {
     val queue = PlaybackSession.queue.value
-    if (queue.items.size <= 1 || queue.currentIndex !in queue.items.indices) return null
+    if (queue.items.isEmpty() || queue.currentIndex !in queue.items.indices) return null
 
     // Get current video progress
     val currentPos = pos ?: 0
@@ -5499,11 +5499,12 @@ class PlayerViewModel : ViewModel(),
         }
       val path = resolvedUri.toString()
       val isAudio =
-        path
-          .substringBefore('?')
-          .substringBefore('#')
-          .substringAfterLast('.', "")
-          .lowercase() in FileTypeUtils.AUDIO_EXTENSIONS ||
+        item.mimeType?.startsWith("audio/", ignoreCase = true) == true ||
+          path
+            .substringBefore('?')
+            .substringBefore('#')
+            .substringAfterLast('.', "")
+            .lowercase() in FileTypeUtils.AUDIO_EXTENSIONS ||
           resolvedUri.toString().lowercase().contains("audio") ||
           uri.toString().lowercase().contains("audio")
       val isCurrentlyPlaying = index == queue.currentIndex

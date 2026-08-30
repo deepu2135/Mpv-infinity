@@ -156,8 +156,8 @@ object TemporaryPlaybackQueue {
     PlaybackItem.fromUri(
       uri = video.uri.toString(),
       title = video.title.takeIf { it.isNotBlank() } ?: video.displayName,
-      mimeType = video.mimeType.takeIf { it.isNotBlank() },
-      artworkUri = null,
+      mimeType = video.mimeType.takeIf { it.isNotBlank() } ?: if (video.isAudio) "audio/*" else "video/*",
+      artworkUri = if (video.isAudio) video.uri.toString() else null,
       artist = video.artist,
     )
 }
