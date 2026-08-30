@@ -285,14 +285,27 @@ jobs:
           tag_name: v1.0.4-preview
           name: Mpv∞ v1.0.4 Preview
           body: |
-            ### Mpv-infinity Torrent Engine Build
-            - Instant playback and swarm bootstrapping optimizations
+            ### 🚀 Mpv-infinity Latest Preview Build
+
+            #### 📥 Direct Download Links
+            - ⚡ **[arm64-v8a APK (Modern Android Devices)](https://github.com/deepu2135/Mpv-infinity/releases/download/v1.0.4-preview/app-standard-arm64-v8a-debug.apk)**
+            - 📱 **[Universal APK (All Devices)](https://github.com/deepu2135/Mpv-infinity/releases/download/v1.0.4-preview/app-standard-universal-debug.apk)**
+            - 📦 **[armeabi-v7a APK (Older 32-bit Devices)](https://github.com/deepu2135/Mpv-infinity/releases/download/v1.0.4-preview/app-standard-armeabi-v7a-debug.apk)**
+            - 💻 **[x86_64 APK (64-bit Emulators / PC)](https://github.com/deepu2135/Mpv-infinity/releases/download/v1.0.4-preview/app-standard-x86_64-debug.apk)**
+            - 💻 **[x86 APK (32-bit Emulators)](https://github.com/deepu2135/Mpv-infinity/releases/download/v1.0.4-preview/app-standard-x86-debug.apk)**
+
+            ---
+            ### 🛠️ Torrent Engine & Recent Updates
+            - Automatic cache deletion on player exit
+            - Stale cache auto-purging on app launch and maintenance
             - Sliding buffer window enforcement (`BUFFER_WINDOW_BYTES` & `READ_AHEAD_BYTES`)
+            - Instant playback & swarm bootstrapping optimizations
             - Configurable buffer preferences in Settings > Advanced > P2P streaming
 
             **Commit**: ${{ env.SHORT_SHA }} (${{ env.COMMIT_COUNT }})
           draft: false
-          prerelease: true
+          prerelease: false
+          make_latest: true
           files: release-apks/*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
