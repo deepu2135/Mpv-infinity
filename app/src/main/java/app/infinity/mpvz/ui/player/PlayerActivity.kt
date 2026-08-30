@@ -978,7 +978,7 @@ class PlayerActivity :
 
     lifecycleScope.launch {
       viewModel.chapters
-        .map { chapters -> chapters.map { ChapterNode(time = it.start, title = it.name) } }
+        .map { chapters -> chapters.map { ChapterNode(time = it.start.toDouble(), title = it.name) } }
         .distinctUntilChanged()
         .collect { chapterNodes ->
           mediaPlaybackService?.setChapters(
@@ -7716,7 +7716,7 @@ class PlayerActivity :
           intent.getBooleanExtra("is_audio", false) ||
           currentPlaybackItem()?.mimeType?.startsWith("audio/", ignoreCase = true) == true,
     )
-    service.setChapters(viewModel.chapters.value.map { ChapterNode(time = it.start, title = it.name) })
+    service.setChapters(viewModel.chapters.value.map { ChapterNode(time = it.start.toDouble(), title = it.name) })
 
     if (!updateThumbnail || thumbnailKey.isBlank()) return
     if (thumbnailKey == lastBackgroundThumbnailKey && (cachedThumbnail != null || lastBackgroundThumbnailResolved)) return

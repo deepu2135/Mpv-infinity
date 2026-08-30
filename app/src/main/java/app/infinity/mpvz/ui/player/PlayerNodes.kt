@@ -18,6 +18,8 @@ data class ChapterNode(
   val time: Double = 0.0,
   val title: String? = null,
 ) {
+  constructor(time: Float, title: String?) : this(time.toDouble(), title)
+
   fun toSegment(fallbackIndex: Int = 0): Segment =
     Segment(title?.trim()?.takeIf { it.isNotBlank() } ?: "Chapter ${fallbackIndex + 1}", time.toFloat())
 }
