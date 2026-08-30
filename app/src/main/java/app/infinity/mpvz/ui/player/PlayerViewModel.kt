@@ -595,8 +595,11 @@ class PlayerViewModel : ViewModel(),
       media3Chapters,
     ) { node, media3 ->
       media3
-        ?: (node?.toObject<List<ChapterNode>>(json)?.map { it.toSegment() }?.toImmutableList()
-          ?: persistentListOf())
+        ?: (runCatching {
+          node?.toObject<List<ChapterNode>>(json)?.mapIndexed { index, chapterNode ->
+            chapterNode.toSegment(index)
+          }?.toImmutableList()
+        }.getOrNull() ?: persistentListOf())
     }.stateIn(viewModelScope, SharingStarted.Lazily, persistentListOf())
 
   fun setMedia3Chapters(chapters: List<dev.vivvvek.seeker.Segment>?) {

@@ -162,6 +162,7 @@ import app.infinity.mpvz.ui.player.visualizer.VisualizerPalette
 import app.infinity.mpvz.ui.player.visualizer.rememberAudioVisualizerFeatures
 
 import app.infinity.mpvz.utils.media.fileExtension
+import `is`.xyz.mpv.Utils
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
@@ -1447,6 +1448,56 @@ fun AudioPlayerControls(
             )
           }
         }
+
+        val position by PlaybackSession.propInt["time-pos"].collectAsStateWithLifecycle()
+        val precisePosition by viewModel.precisePosition.collectAsStateWithLifecycle()
+        val currentPosSec = if (precisePosition > 0f) precisePosition else position?.toFloat() ?: 0f
+        val currentChapterIndex by PlaybackSession.propInt["chapter"].collectAsStateWithLifecycle()
+        val activeChapter = remember(chapters, currentChapterIndex, currentPosSec) {
+          if (chapters.isEmpty()) null
+          else if (currentChapterIndex != null && currentChapterIndex in chapters.indices) chapters[currentChapterIndex!!]
+          else chapters.lastOrNull { it.start <= currentPosSec } ?: chapters.firstOrNull()
+        }
+
+        if (activeChapter != null && chapters.isNotEmpty()) {
+          Spacer(modifier = Modifier.height(6.dp))
+          Surface(
+            shape = RoundedCornerShape(10.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.75f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+            modifier =
+              Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .clickable { onOpenSheet(Sheets.Chapters) },
+          ) {
+            Row(
+              verticalAlignment = Alignment.CenterVertically,
+              horizontalArrangement = Arrangement.spacedBy(6.dp),
+              modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            ) {
+              Icon(
+                imageVector = Icons.RoundedFilled.Bookmarks,
+                contentDescription = stringResource(R.string.btn_label_chapter),
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(16.dp),
+              )
+              Text(
+                text = activeChapter.name,
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).basicMarquee(iterations = Int.MAX_VALUE),
+              )
+              Text(
+                text = Utils.prettyTime(activeChapter.start.toInt()),
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                color = MaterialTheme.colorScheme.primary,
+              )
+            }
+          }
+        }
       }
     }
 
@@ -1660,6 +1711,18 @@ fun AudioPlayerControls(
                   tint = if (backgroundPlaybackEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
               }
+              if (chapters.isNotEmpty()) {
+                ReactiveIconButton(
+                  onClick = { onOpenSheet(Sheets.Chapters) },
+                  modifier = Modifier.size(40.dp),
+                ) {
+                  Icon(
+                    imageVector = Icons.RoundedFilled.Bookmarks,
+                    contentDescription = stringResource(R.string.btn_label_chapter),
+                    tint = MaterialTheme.colorScheme.primary,
+                  )
+                }
+              }
             }
           }
         } else {
@@ -1752,6 +1815,18 @@ fun AudioPlayerControls(
                   contentDescription = stringResource(R.string.btn_label_background_playback),
                   tint = if (backgroundPlaybackEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+              }
+              if (chapters.isNotEmpty()) {
+                ReactiveIconButton(
+                  onClick = { onOpenSheet(Sheets.Chapters) },
+                  modifier = Modifier.size(40.dp),
+                ) {
+                  Icon(
+                    imageVector = Icons.RoundedFilled.Bookmarks,
+                    contentDescription = stringResource(R.string.btn_label_chapter),
+                    tint = MaterialTheme.colorScheme.primary,
+                  )
+                }
               }
             }
           }

@@ -466,9 +466,14 @@ fun PlayerControls(
         onMedia3AudioPitchCorrection = onMedia3AudioPitchCorrection,
         chapter = chapters.getOrNull(currentChapter ?: 0),
         chapters = chapters.toImmutableList(),
-        onSeekToChapter = {
-          PlaybackSession.setPropertyInt("chapter", it)
-          viewModel.unpause()
+        onSeekToChapter = { index ->
+          if (isMedia3Active) {
+            chapters.getOrNull(index)?.start?.let { viewModel.seekTo(it.toDouble()) }
+            viewModel.unpause()
+          } else {
+            PlaybackSession.setPropertyInt("chapter", index)
+            viewModel.unpause()
+          }
         },
         decoder = decoder,
         isMedia3Active = isMedia3Active,
