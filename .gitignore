@@ -89,6 +89,7 @@ Desktop.ini
 # =========================
 *.jks
 *.keystore
+!app/debug.keystore
 *.key
 *.pem
 *.p12
