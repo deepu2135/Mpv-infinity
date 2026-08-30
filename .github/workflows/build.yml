@@ -28,7 +28,7 @@ on:
           - release
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -268,3 +268,31 @@ jobs:
           path: app/build/outputs/apk/standard/${{ env.BUILD_TYPE }}/app-standard-x86_64-${{ env.BUILD_TYPE }}.apk
           if-no-files-found: ignore
           retention-days: 7
+
+      - name: Stage APKs for GitHub Release
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-apks
+          find app/build/outputs/apk -type f -name '*.apk' -exec cp {} release-apks/ \;
+          ls -la release-apks/
+
+      - name: Create or update GitHub Release
+        if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.4-preview
+          name: Mpv∞ v1.0.4 Preview
+          body: |
+            ### Mpv-infinity Torrent Engine Build
+            - Instant playback and swarm bootstrapping optimizations
+            - Sliding buffer window enforcement (`BUFFER_WINDOW_BYTES` & `READ_AHEAD_BYTES`)
+            - Configurable buffer preferences in Settings > Advanced > P2P streaming
+
+            **Commit**: ${{ env.SHORT_SHA }} (${{ env.COMMIT_COUNT }})
+          draft: false
+          prerelease: true
+          files: release-apks/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
