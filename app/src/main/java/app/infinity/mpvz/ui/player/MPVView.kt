@@ -263,7 +263,7 @@ class MPVView(
     PlaybackSession.setOptionString("cookies-file", AndroidCookieJar.playbackCookieFile(context).absolutePath)
     PlaybackSession.setOptionString("cache", "auto")
     PlaybackSession.setOptionString("cache-pause", "yes")
-    PlaybackSession.setOptionString("cache-pause-wait", "2")
+    PlaybackSession.setOptionString("cache-pause-wait", "1")
     PlaybackSession.setOptionString("demuxer-max-bytes", "64MiB")
     // Recover boundedly from transient HTTP/TLS disconnects, including non-seekable live inputs.
     // Do not use reconnect_at_eof globally: a legitimate VOD EOF must still finish normally.

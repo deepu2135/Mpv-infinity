@@ -35,13 +35,18 @@ class TorrentProxyServer(
     val firstPiece: Int,
     val lastPiece: Int,
     val mimeType: String,
+    val readAheadBytes: Long = READ_AHEAD_BYTES,
+    val bufferWindowBytes: Long = BUFFER_WINDOW_BYTES,
   )
 
   companion object {
     private const val TAG = "TorrentProxyServer"
+    private const val BUFFER_WINDOW_BYTES = 64L * 1024L * 1024L
     private const val READ_AHEAD_BYTES = 16L * 1024L * 1024L
+    private const val HEAD_PIECES_COUNT = 16
+    private const val TAIL_PIECES_COUNT = 8
     private const val PIECE_WAIT_TIMEOUT_MS = 120_000L
-    private const val PIECE_POLL_INTERVAL_MS = 40L
+    private const val PIECE_POLL_INTERVAL_MS = 15L
   }
 
   private class HeadResponse(
@@ -54,6 +59,8 @@ class TorrentProxyServer(
   private val route = "/stream/$capability"
   private val openStreams = ConcurrentHashMap.newKeySet<TorrentStreamInputStream>()
   private val priorityLock = Any()
+  private val headEnd = (target.firstPiece + HEAD_PIECES_COUNT - 1).coerceAtMost(target.lastPiece)
+  private val tailStart = (target.lastPiece - TAIL_PIECES_COUNT + 1).coerceAtLeast(target.firstPiece)
   private var prioritizedFrom = -1
   private var prioritizedThrough = -1
 
@@ -115,26 +122,51 @@ class TorrentProxyServer(
   }
 
   private fun prioritize(relativeOffset: Long) {
+    if (!target.handle.isValid) return
     val absoluteStart = target.fileOffset + relativeOffset
-    val first = (absoluteStart / target.pieceLength).toInt().coerceIn(target.firstPiece, target.lastPiece)
-    val absoluteEnd =
+    val currentPiece = (absoluteStart / target.pieceLength).toInt().coerceIn(target.firstPiece, target.lastPiece)
+    val windowEndByte =
       min(
         target.fileOffset + target.fileSize - 1L,
-        absoluteStart + READ_AHEAD_BYTES - 1L,
+        absoluteStart + target.bufferWindowBytes - 1L,
       )
-    val last = (absoluteEnd / target.pieceLength).toInt().coerceIn(first, target.lastPiece)
+    val windowEndPiece = (windowEndByte / target.pieceLength).toInt().coerceIn(currentPiece, target.lastPiece)
+
+    val readAheadEndByte =
+      min(
+        target.fileOffset + target.fileSize - 1L,
+        absoluteStart + target.readAheadBytes - 1L,
+      )
+    val readAheadEndPiece = (readAheadEndByte / target.pieceLength).toInt().coerceIn(currentPiece, target.lastPiece)
 
     synchronized(priorityLock) {
-      if (first == prioritizedFrom && last <= prioritizedThrough) return
-      // Keep the engine's full selected-file sequential range stable. mpv commonly issues
-      // overlapping head/tail probes; moving the global range for every HTTP request makes those
-      // probes race and can starve the actual playback reader.
-      for (piece in first..last) {
-        target.handle.piecePriority(piece, Priority.TOP_PRIORITY)
-        target.handle.setPieceDeadline(piece, ((piece - first) * 100).coerceAtMost(10_000))
+      if (currentPiece == prioritizedFrom && windowEndPiece == prioritizedThrough) return
+
+      // Demote pieces that were in the previous sliding window but are now outside the new window.
+      // Do not demote head and tail pieces, as mpv relies on them for metadata and seeking indexes.
+      if (prioritizedFrom != -1 && prioritizedThrough != -1) {
+        val oldFrom = prioritizedFrom
+        val oldThrough = prioritizedThrough
+        for (p in oldFrom..oldThrough) {
+          if (p !in currentPiece..windowEndPiece && p > headEnd && p < tailStart) {
+            target.handle.piecePriority(p, Priority.IGNORE)
+            target.handle.resetPieceDeadline(p)
+          }
+        }
       }
-      prioritizedFrom = first
-      prioritizedThrough = last
+
+      // Activate and prioritize pieces within the new sliding buffer window.
+      for (piece in currentPiece..windowEndPiece) {
+        target.handle.piecePriority(piece, Priority.TOP_PRIORITY)
+        if (piece <= readAheadEndPiece) {
+          val offset = piece - currentPiece
+          val deadline = if (offset < 3) 0 else (offset * 30).coerceAtMost(3_000)
+          target.handle.setPieceDeadline(piece, deadline)
+        }
+      }
+
+      prioritizedFrom = currentPiece
+      prioritizedThrough = windowEndPiece
     }
   }
 
@@ -234,6 +266,9 @@ class TorrentProxyServer(
       val deadline = System.currentTimeMillis() + PIECE_WAIT_TIMEOUT_MS
 
       for (piece in first..last) {
+        if (!target.handle.havePiece(piece)) {
+          target.handle.setPieceDeadline(piece, 0)
+        }
         while (!target.handle.havePiece(piece)) {
           ensureActive()
           if (System.currentTimeMillis() >= deadline) throw IOException("Timed out waiting for torrent data")

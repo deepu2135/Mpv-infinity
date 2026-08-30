@@ -976,6 +976,33 @@ object SearchablePreferences {
       )
       add(
         SearchablePreference(
+          titleRes = R.string.pref_enable_p2p_streaming_title,
+          summaryRes = R.string.pref_enable_p2p_streaming_summary,
+          keywords = listOf("torrent", "p2p", "stream", "magnet", "peer", "download"),
+          category = "Advanced",
+          screen = AdvancedPreferencesScreen,
+        ),
+      )
+      add(
+        SearchablePreference(
+          titleRes = R.string.pref_torrent_read_ahead_title,
+          summaryRes = R.string.pref_torrent_read_ahead_summary,
+          keywords = listOf("torrent", "readahead", "buffer", "cache", "size", "bytes", "p2p"),
+          category = "Advanced",
+          screen = AdvancedPreferencesScreen,
+        ),
+      )
+      add(
+        SearchablePreference(
+          titleRes = R.string.pref_torrent_buffer_window_title,
+          summaryRes = R.string.pref_torrent_buffer_window_summary,
+          keywords = listOf("torrent", "buffer", "window", "sliding", "cache", "limit", "p2p"),
+          category = "Advanced",
+          screen = AdvancedPreferencesScreen,
+        ),
+      )
+      add(
+        SearchablePreference(
           titleRes = R.string.pref_enable_lua_scripts_title,
           summaryRes = R.string.pref_enable_lua_scripts_summary,
           keywords = listOf("scripts", "lua", "js", "javascript", "enable", "load", "plugin"),

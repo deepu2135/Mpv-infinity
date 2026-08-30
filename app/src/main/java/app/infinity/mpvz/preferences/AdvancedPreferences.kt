@@ -32,6 +32,8 @@ class AdvancedPreferences(
   val selectedLuaScripts = preferenceStore.getStringSet("selected_lua_scripts", emptySet())
 
   val enableP2pStreaming = preferenceStore.getBoolean("enable_p2p_streaming", true)
+  val torrentReadAheadBytes = preferenceStore.getLong("torrent_read_ahead_bytes", 16L * 1024L * 1024L)
+  val torrentBufferWindowBytes = preferenceStore.getLong("torrent_buffer_window_bytes", 64L * 1024L * 1024L)
 
   val enableHlsProxy = preferenceStore.getBoolean("enable_hls_proxy", true)
 

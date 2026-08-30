@@ -578,6 +578,8 @@ object AdvancedPreferencesScreen : Screen {
           item {
             PreferenceCard {
               val enableP2pStreaming by preferences.enableP2pStreaming.collectAsState()
+              val torrentReadAheadBytes by preferences.torrentReadAheadBytes.collectAsState()
+              val torrentBufferWindowBytes by preferences.torrentBufferWindowBytes.collectAsState()
               val enableHlsProxy by preferences.enableHlsProxy.collectAsState()
 
               SwitchPreference(
@@ -591,6 +593,76 @@ object AdvancedPreferencesScreen : Screen {
                   )
                 },
               )
+
+              if (enableP2pStreaming) {
+                PreferenceDivider()
+
+                val readAheadOptions =
+                  listOf(
+                    4L * 1024L * 1024L,
+                    8L * 1024L * 1024L,
+                    16L * 1024L * 1024L,
+                    32L * 1024L * 1024L,
+                    64L * 1024L * 1024L,
+                    128L * 1024L * 1024L,
+                    256L * 1024L * 1024L,
+                  )
+
+                ListPreference(
+                  value = torrentReadAheadBytes,
+                  onValueChange = preferences.torrentReadAheadBytes::set,
+                  values = readAheadOptions,
+                  valueToText = { bytes ->
+                    AnnotatedString("${bytes / (1024L * 1024L)} MB")
+                  },
+                  title = { Text(stringResource(R.string.pref_torrent_read_ahead_title)) },
+                  summary = {
+                    Text(
+                      "${torrentReadAheadBytes / (1024L * 1024L)} MB",
+                      color = MaterialTheme.colorScheme.outline,
+                    )
+                  },
+                )
+
+                PreferenceDivider()
+
+                val bufferWindowOptions =
+                  listOf(
+                    16L * 1024L * 1024L,
+                    32L * 1024L * 1024L,
+                    64L * 1024L * 1024L,
+                    128L * 1024L * 1024L,
+                    256L * 1024L * 1024L,
+                    512L * 1024L * 1024L,
+                    1024L * 1024L * 1024L,
+                  )
+
+                ListPreference(
+                  value = torrentBufferWindowBytes,
+                  onValueChange = preferences.torrentBufferWindowBytes::set,
+                  values = bufferWindowOptions,
+                  valueToText = { bytes ->
+                    if (bytes >= 1024L * 1024L * 1024L) {
+                      AnnotatedString("${bytes / (1024L * 1024L * 1024L)} GB")
+                    } else {
+                      AnnotatedString("${bytes / (1024L * 1024L)} MB")
+                    }
+                  },
+                  title = { Text(stringResource(R.string.pref_torrent_buffer_window_title)) },
+                  summary = {
+                    val text =
+                      if (torrentBufferWindowBytes >= 1024L * 1024L * 1024L) {
+                        "${torrentBufferWindowBytes / (1024L * 1024L * 1024L)} GB"
+                      } else {
+                        "${torrentBufferWindowBytes / (1024L * 1024L)} MB"
+                      }
+                    Text(
+                      text,
+                      color = MaterialTheme.colorScheme.outline,
+                    )
+                  },
+                )
+              }
 
               PreferenceDivider()
 
