@@ -156,3 +156,10 @@ lint/tmp/
 # Profiling
 # =========================
 *.hprof
+
+# =========================
+# Local Assistant Rules
+# =========================
+GEMINI.md
+AGENTS.md
+
