@@ -186,6 +186,12 @@ class TorrentStreamingEngine(
   @Volatile
   private var closed = false
 
+  init {
+    scope.launch {
+      cleanStaleTorrentCaches()
+    }
+  }
+
   /**
    * Resolves and validates torrent metadata without downloading a media file.
    *
@@ -847,10 +853,8 @@ class TorrentStreamingEngine(
       runCatching { session.remove(handle, SessionHandle.DELETE_FILES) }
     }
     runCatching { session.stop() }
-    if (cacheDir.exists() && !cacheDir.deleteRecursively()) {
-      Log.w(TAG, "Torrent cache cleanup did not remove every file")
-    }
-    cacheDir.parentFile?.takeIf { it.isDirectory && it.list().isNullOrEmpty() }?.delete()
+    deleteDirectoryWithRetries(cacheDir)
+    cleanStaleTorrentCaches()
   }
 
   private fun cleanupAfterPreparationFailure(
@@ -862,8 +866,46 @@ class TorrentStreamingEngine(
       cleanup(session, handle, cacheDir)
       return
     }
-    if (cacheDir.exists() && !cacheDir.deleteRecursively()) {
-      Log.w(TAG, "Torrent cache cleanup did not remove every file")
+    deleteDirectoryWithRetries(cacheDir)
+    cleanStaleTorrentCaches()
+  }
+
+  private fun deleteDirectoryWithRetries(dir: File) {
+    if (!dir.exists()) return
+    for (attempt in 1..5) {
+      if (dir.deleteRecursively()) return
+      try {
+        Thread.sleep(50L * attempt)
+      } catch (_: InterruptedException) {
+        break
+      }
+    }
+    if (dir.exists()) {
+      runCatching {
+        dir.walkBottomUp().forEach { file ->
+          if (!file.delete()) {
+            file.deleteOnExit()
+          }
+        }
+      }
+      Log.w(TAG, "Torrent cache cleanup did not remove every file in ${dir.path}")
+    }
+    dir.parentFile?.takeIf { it.isDirectory && it.list().isNullOrEmpty() }?.delete()
+  }
+
+  fun cleanStaleTorrentCaches() {
+    val baseDir = File(appContext.cacheDir, "torrent_streaming")
+    if (!baseDir.exists() || !baseDir.isDirectory) return
+    val activeDirCanonical = runCatching { active?.cacheDir?.canonicalPath }.getOrNull()
+    val preparedDirCanonical = runCatching { prepared?.cacheDir?.canonicalPath }.getOrNull()
+    baseDir.listFiles()?.forEach { file ->
+      val path = runCatching { file.canonicalPath }.getOrNull()
+      if (path != null && path != activeDirCanonical && path != preparedDirCanonical) {
+        runCatching { file.deleteRecursively() }
+      }
+    }
+    if (baseDir.list().isNullOrEmpty()) {
+      runCatching { baseDir.delete() }
     }
   }
 

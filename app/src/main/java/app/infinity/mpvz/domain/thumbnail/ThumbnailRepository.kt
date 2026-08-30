@@ -233,6 +233,7 @@ class ThumbnailRepository(
         File(context.cacheDir, "thumbnails"),
         File(context.filesDir, "thumbnails"),
         File(context.cacheDir, "remote_images"),
+        File(context.cacheDir, "torrent_streaming"),
       ).forEach(::deleteCacheDirectory)
       check(localDiskDir.mkdirs() || localDiskDir.isDirectory) {
         "Unable to recreate thumbnail cache directory: ${localDiskDir.absolutePath}"

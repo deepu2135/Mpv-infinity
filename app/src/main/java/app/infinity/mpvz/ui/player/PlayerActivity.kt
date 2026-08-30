@@ -87,6 +87,7 @@ import app.infinity.mpvz.domain.playbackstate.repository.PlaybackStateRepository
 import app.infinity.mpvz.domain.torrent.TorrentStreamRequest
 import app.infinity.mpvz.domain.torrent.TorrentStreamException
 import app.infinity.mpvz.domain.torrent.TorrentStreamingEngine
+import app.infinity.mpvz.domain.torrent.TorrentStreamingState
 import app.infinity.mpvz.domain.torrent.canonicalInfoHash
 import app.infinity.mpvz.domain.torrent.isTorrentSource
 import app.infinity.mpvz.network.AndroidCookieJar
@@ -1169,6 +1170,11 @@ class PlayerActivity :
       return
     }
 
+    if (isCurrentMediaTorrent()) {
+      requestExplicitHardStop()
+      return
+    }
+
     // Background playback or Mini Player handoff on Back: return to the browser while
     // handing the live MPV session to the foreground service.
     if (
@@ -1726,7 +1732,9 @@ class PlayerActivity :
       }
       cleanupReceivers()
       releaseMediaSession()
-      if (!keepBackgroundPlaybackAlive && !torrentPickerHandoff) torrentStreamingEngine.stopStream()
+      if (!torrentPickerHandoff && (!keepBackgroundPlaybackAlive || isCurrentMediaTorrent())) {
+        torrentStreamingEngine.stopStream()
+      }
     }.onFailure { e ->
       Log.e(TAG, "Error during onDestroy", e)
     }
@@ -2438,6 +2446,7 @@ class PlayerActivity :
     isInBackgroundPlayback = false
     pendingBackgroundTransition = false
     pendingBackNavigationBackgroundTransition = false
+    torrentStreamingEngine.stopStream()
     runCatching {
       media3PlaybackController.detachUiCallbacks()
       media3PlaybackController.stop()
@@ -2466,6 +2475,10 @@ class PlayerActivity :
       // Don't restore UI during normal finish to prevent flickering
       // System will handle UI restoration automatically
       isReady = false
+
+      if (isCurrentMediaTorrent()) {
+        torrentStreamingEngine.stopStream()
+      }
 
       // Clean up service when finishing
       if (!isBackgroundPlaybackSessionActive) {
@@ -6177,6 +6190,13 @@ class PlayerActivity :
           }
         }
       }
+  }
+
+  private fun isCurrentMediaTorrent(): Boolean {
+    val currentUri = currentPlayableUri ?: intent.data?.toString() ?: fileName
+    return isTorrentSource(currentUri, intent.type) ||
+      torrentStreamingEngine.state.value is TorrentStreamingState.Streaming ||
+      torrentStreamingEngine.state.value is TorrentStreamingState.Connecting
   }
 
   private fun redirectUnselectedTorrentToPicker(

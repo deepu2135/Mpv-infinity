@@ -220,6 +220,8 @@ class App :
         delay(POST_START_MAINTENANCE_DELAY_MS)
         val metadataCache: VideoMetadataCacheRepository = getKoin().get()
         metadataCache.performMaintenance()
+        val torrentEngine: app.infinity.mpvz.domain.torrent.TorrentStreamingEngine = getKoin().get()
+        torrentEngine.cleanStaleTorrentCaches()
       } catch (cancellation: CancellationException) {
         metadataMaintenanceStarted.set(false)
         throw cancellation
