@@ -162,6 +162,8 @@ class TorrentProxyServer(
           val offset = piece - currentPiece
           val deadline = if (offset < 3) 0 else (offset * 30).coerceAtMost(3_000)
           target.handle.setPieceDeadline(piece, deadline)
+        } else {
+          target.handle.resetPieceDeadline(piece)
         }
       }
 

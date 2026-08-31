@@ -511,7 +511,7 @@ class TorrentStreamingEngine(
     val priorities = Array(info.files().numFiles()) { Priority.IGNORE }
 
     return monitorTorrentErrors(session) { failure ->
-      session.download(info, cacheDir, null, priorities, null, TorrentFlags.SEQUENTIAL_DOWNLOAD)
+      session.download(info, cacheDir, null, priorities, null, TorrentFlags.UPLOAD_MODE)
       val handle = waitForHandle(session, info.infoHash(), startGeneration, failure)
       endpoints.trackers.forEach { tracker -> handle.addTracker(AnnounceEntry(tracker)) }
       endpoints.webSeeds.forEach(handle::addUrlSeed)
@@ -659,7 +659,7 @@ class TorrentStreamingEngine(
       (advancedPreferences?.torrentBufferWindowBytes?.get() ?: BUFFER_WINDOW_BYTES)
         .coerceAtLeast(configuredReadAhead)
 
-    handle.setFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD)
+    handle.unsetFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD)
     val storage = info.files()
     val priorities = Array(storage.numFiles()) { Priority.IGNORE }
     priorities[selected.index] = Priority.TOP_PRIORITY
@@ -669,7 +669,6 @@ class TorrentStreamingEngine(
     val fileOffset = storage.fileOffset(selected.index)
     val firstPiece = (fileOffset / pieceLength).toInt()
     val lastPiece = ((fileOffset + selected.size - 1L) / pieceLength).toInt()
-    handle.setSequentialRange(firstPiece, lastPiece)
 
     // Reset all pieces of the selected file to IGNORE so downloading is constrained to the buffer window.
     for (piece in firstPiece..lastPiece) {
