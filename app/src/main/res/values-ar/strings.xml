@@ -285,7 +285,8 @@
   <string name="pref_audio_volume_normalization_summary">ضبط مستوى الصوت تلقائيًا للحفاظ على مستوى علو ثابت</string>
   <string name="pref_music_visualizer_title">مؤثر مرئي للموسيقى</string>
   <string name="pref_music_visualizer_summary">عرض مؤثر مرئي متفاعل مع الصوت أثناء تشغيل الموسيقى</string>
-  <string name="pref_audio_visualizer_style_title">نمط المؤثر المرئي</string>
+  <string name="pref_audio_visualizer_style_title">نمط المؤثرات البصرية</string>
+  <string name="pref_audio_visualizer_style_none">بلا</string>
   <string name="pref_audio_visualizer_style_blob">كتلة</string>
   <string name="pref_audio_visualizer_style_galaxy">مجرة</string>
   <string name="pref_audio_visualizer_style_cuboid">مكعباني</string>

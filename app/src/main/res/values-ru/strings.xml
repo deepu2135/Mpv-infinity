@@ -286,6 +286,7 @@
   <string name="pref_music_visualizer_title">Музыкальный визуализатор</string>
   <string name="pref_music_visualizer_summary">Показывать реагирующую на звук визуализацию при воспроизведении музыки</string>
   <string name="pref_audio_visualizer_style_title">Стиль визуализатора</string>
+  <string name="pref_audio_visualizer_style_none">Нет</string>
   <string name="pref_audio_visualizer_style_blob">Блоб</string>
   <string name="pref_audio_visualizer_style_galaxy">Галактика</string>
   <string name="pref_audio_visualizer_style_cuboid">Кубоид</string>

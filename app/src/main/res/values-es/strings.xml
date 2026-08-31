@@ -286,6 +286,7 @@ Siguiente: NEXT</string>
   <string name="pref_music_visualizer_title">Visualizador de música</string>
   <string name="pref_music_visualizer_summary">Mostrar un visualizador que reacciona al audio al reproducir música</string>
   <string name="pref_audio_visualizer_style_title">Estilo del visualizador</string>
+  <string name="pref_audio_visualizer_style_none">Ninguno</string>
   <string name="pref_audio_visualizer_style_blob">Blob</string>
   <string name="pref_audio_visualizer_style_galaxy">Galaxia</string>
   <string name="pref_audio_visualizer_style_cuboid">Cuboide</string>

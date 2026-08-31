@@ -66,6 +66,7 @@ enum class AudioPlayerOrientation(
 enum class AudioVisualizerStyle(
   @StringRes val title: Int,
 ) {
+  None(R.string.pref_audio_visualizer_style_none),
   Blob(R.string.pref_audio_visualizer_style_blob),
   Galaxy(R.string.pref_audio_visualizer_style_galaxy),
   Cuboid(R.string.pref_audio_visualizer_style_cuboid),

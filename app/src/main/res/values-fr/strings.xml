@@ -285,7 +285,8 @@ Suivant : NEXT</string>
   <string name="pref_audio_volume_normalization_summary">Ajuster automatiquement le volume pour conserver un niveau sonore constant</string>
   <string name="pref_music_visualizer_title">Visualiseur musical</string>
   <string name="pref_music_visualizer_summary">Afficher un visualiseur réactif au son pendant la lecture de musique</string>
-  <string name="pref_audio_visualizer_style_title">Style du visualiseur</string>
+  <string name="pref_audio_visualizer_style_title">Style de visualiseur</string>
+  <string name="pref_audio_visualizer_style_none">Aucun</string>
   <string name="pref_audio_visualizer_style_blob">Blob</string>
   <string name="pref_audio_visualizer_style_galaxy">Galaxie</string>
   <string name="pref_audio_visualizer_style_cuboid">Cuboïde</string>

@@ -276,7 +276,8 @@
   <string name="toast_file_not_found">फाइल अब मौजूद नहीं है</string>
   <string name="pref_music_visualizer_title">म्यूज़िक विज़ुअलाइज़र</string>
   <string name="pref_music_visualizer_summary">म्यूज़िक चलाते समय ऑडियो-रिएक्टिव विज़ुअलाइज़र दिखाएं</string>
-  <string name="pref_audio_visualizer_style_title">विज़ुअलाइज़र स्टाइल</string>
+  <string name="pref_audio_visualizer_style_title">विज़ुअलाइज़र शैली</string>
+  <string name="pref_audio_visualizer_style_none">कोई नहीं</string>
   <string name="pref_audio_visualizer_style_blob">Blob</string>
   <string name="pref_audio_visualizer_style_galaxy">Galaxy</string>
   <string name="pref_audio_visualizer_style_cuboid">Cuboid</string>

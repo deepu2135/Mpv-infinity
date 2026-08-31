@@ -1891,11 +1891,16 @@ class MediaPlaybackService :
         } else {
           capturedSnapshot
         }
+      val isAudio = notificationIsAudio
+      val isAudiobook = isCurrentMediaAudiobook()
+      val hasChapters = chapters.isNotEmpty()
+      val savePosition = if (isAudio) (isAudiobook || hasChapters) else playerPreferences.savePositionOnQuit.get()
+
       val playbackState =
         PlaybackStatePersistence.buildEntity(
           oldState = oldState,
           snapshot = snapshot,
-          savePositionOnQuit = playerPreferences.savePositionOnQuit.get(),
+          savePositionOnQuit = savePosition,
           watchedThreshold = browserPreferences.watchedThreshold.get(),
         )
       playbackStateRepository.upsert(playbackState)
@@ -1903,6 +1908,20 @@ class MediaPlaybackService :
     }.onFailure { error ->
       Log.e(TAG, "Error saving playback state from service", error)
     }
+  }
+
+  private fun isCurrentMediaAudiobook(): Boolean {
+    if (chapters.isNotEmpty()) return true
+    val currentItem = PlaybackSession.queue.value.currentItem
+    val candidates = sequenceOf(mediaTitle, mediaUri, currentItem?.playableUri, currentItem?.title).filterNotNull().toList()
+    for (candidate in candidates) {
+      val lower = candidate.lowercase(Locale.ROOT)
+      val ext = lower.substringBefore('?').substringAfterLast('.')
+      if (ext in setOf("m4b", "aax", "aa")) return true
+      if (lower.contains("/audiobook") || lower.contains("/audio book") || lower.contains("/audio_book") || lower.contains("/audible/")) return true
+      if (lower.contains("audiobook") || lower.contains("audio book")) return true
+    }
+    return false
   }
 
   /*

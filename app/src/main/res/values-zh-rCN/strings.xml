@@ -285,7 +285,8 @@
   <string name="pref_audio_volume_normalization_summary">自动调整音量以保持一致的响度</string>
   <string name="pref_music_visualizer_title">音乐可视化</string>
   <string name="pref_music_visualizer_summary">播放音乐时显示随音频变化的可视化效果</string>
-  <string name="pref_audio_visualizer_style_title">可视化样式</string>
+  <string name="pref_audio_visualizer_style_title">可视化器样式</string>
+  <string name="pref_audio_visualizer_style_none">无</string>
   <string name="pref_audio_visualizer_style_blob">流体</string>
   <string name="pref_audio_visualizer_style_galaxy">星系</string>
   <string name="pref_audio_visualizer_style_cuboid">长方体</string>

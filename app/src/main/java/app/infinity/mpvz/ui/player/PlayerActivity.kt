@@ -2082,7 +2082,7 @@ class PlayerActivity :
       }
     }
 
-    val isAudio = viewModel.isAudioOnly.value || isCurrentMediaKnownAudio()
+    val isAudio = viewModel.isAudioOnly.value || isKnownAudioLaunch(intent) || isCurrentMediaKnownAudio()
     val isAudiobook = isCurrentMediaAudiobook()
     val hasChapters = viewModel.chapters.value.isNotEmpty()
     val shouldResume = if (isAudio) (isAudiobook || hasChapters) else playerPreferences.savePositionOnQuit.get()
@@ -2092,7 +2092,7 @@ class PlayerActivity :
     } else {
       lifecycleScope.launch(Dispatchers.IO) {
         val savedPositionMs = persistedPlaybackPositionMs(item)
-        val allowResume = if (isAudio) (shouldResume || savedPositionMs > 0L) else shouldResume
+        val allowResume = shouldResume
         withContext(Dispatchers.Main.immediate) {
           if (playbackEngine == PlaybackEngine.MEDIA3 && media3ItemId == item.stableId) {
             startMedia3(if (allowResume) savedPositionMs else 0L)
@@ -5317,7 +5317,7 @@ class PlayerActivity :
         val oldState = playbackStateRepository.getVideoDataByTitle(snapshot.mediaIdentifier)
         Log.d(TAG, "Saving playback state for: ${snapshot.mediaTitle} (identifier: ${snapshot.mediaIdentifier})")
 
-        val isAudio = viewModel.isAudioOnly.value || isCurrentMediaKnownAudio()
+        val isAudio = viewModel.isAudioOnly.value || isKnownAudioLaunch(intent) || isCurrentMediaKnownAudio()
         val isAudiobook = isCurrentMediaAudiobook()
         val hasChapters = viewModel.chapters.value.isNotEmpty()
         val savePosition = if (isAudio) (isAudiobook || hasChapters) else playerPreferences.savePositionOnQuit.get()
@@ -5564,10 +5564,10 @@ class PlayerActivity :
     PlaybackSession.setPropertyDouble("video-zoom", state.videoZoom.toDouble())
     viewModel.setVideoZoom(state.videoZoom)
 
-    val isAudio = viewModel.isAudioOnly.value || isCurrentMediaKnownAudio()
+    val isAudio = viewModel.isAudioOnly.value || isKnownAudioLaunch(intent) || isCurrentMediaKnownAudio()
     val isAudiobook = isCurrentMediaAudiobook()
     val hasChapters = viewModel.chapters.value.isNotEmpty()
-    val shouldResume = if (isAudio) (isAudiobook || hasChapters || state.lastPosition > 0) else playerPreferences.savePositionOnQuit.get()
+    val shouldResume = if (isAudio) (isAudiobook || hasChapters) else playerPreferences.savePositionOnQuit.get()
 
     if (!pendingQueueTransitionStartAtZero &&
       shouldResume &&

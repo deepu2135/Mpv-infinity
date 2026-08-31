@@ -285,7 +285,8 @@ Weiter: NEXT</string>
   <string name="pref_audio_volume_normalization_summary">Lautstärke automatisch anpassen, um eine gleichmäßige Lautheit beizubehalten</string>
   <string name="pref_music_visualizer_title">Musikvisualisierung</string>
   <string name="pref_music_visualizer_summary">Während der Musikwiedergabe eine audioreaktive Visualisierung anzeigen</string>
-  <string name="pref_audio_visualizer_style_title">Visualisierungsstil</string>
+  <string name="pref_audio_visualizer_style_title">Visualizer-Stil</string>
+  <string name="pref_audio_visualizer_style_none">Keine</string>
   <string name="pref_audio_visualizer_style_blob">Blob</string>
   <string name="pref_audio_visualizer_style_galaxy">Galaxie</string>
   <string name="pref_audio_visualizer_style_cuboid">Quader</string>

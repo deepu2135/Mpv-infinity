@@ -285,7 +285,8 @@
   <string name="pref_audio_volume_normalization_summary">一定の音量を保つように音量を自動調整します</string>
   <string name="pref_music_visualizer_title">ミュージックビジュアライザー</string>
   <string name="pref_music_visualizer_summary">音楽の再生中に音声に反応するビジュアライザーを表示します</string>
-  <string name="pref_audio_visualizer_style_title">ビジュアライザーのスタイル</string>
+  <string name="pref_audio_visualizer_style_title">ビジュアライザースタイル</string>
+  <string name="pref_audio_visualizer_style_none">なし</string>
   <string name="pref_audio_visualizer_style_blob">ブロブ</string>
   <string name="pref_audio_visualizer_style_galaxy">ギャラクシー</string>
   <string name="pref_audio_visualizer_style_cuboid">キューボイド</string>

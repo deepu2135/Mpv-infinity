@@ -812,8 +812,10 @@ fun AudioPlayerControls(
     }
   }
 
-  val targetTopColor = if (ambientModeEnabled && (!showVisualizer || showInPlaceLyrics)) (ambientColors?.first ?: Color.Transparent) else Color.Transparent
-  val targetBottomColor = if (ambientModeEnabled && (!showVisualizer || showInPlaceLyrics)) (ambientColors?.second ?: Color.Transparent) else Color.Transparent
+  val isVisualizerActiveEffective = showVisualizer && audioVisualizerStyle != AudioVisualizerStyle.None
+
+  val targetTopColor = if (ambientModeEnabled && (!isVisualizerActiveEffective || showInPlaceLyrics)) (ambientColors?.first ?: Color.Transparent) else Color.Transparent
+  val targetBottomColor = if (ambientModeEnabled && (!isVisualizerActiveEffective || showInPlaceLyrics)) (ambientColors?.second ?: Color.Transparent) else Color.Transparent
 
   val animatedAmbientTop: Color by animateColorAsState(
     targetValue = targetTopColor,
@@ -835,7 +837,7 @@ fun AudioPlayerControls(
         .fillMaxSize()
         .background(MaterialTheme.colorScheme.surface)
         .drawWithCache {
-          if (ambientModeEnabled && (!showVisualizer || showInPlaceLyrics) && (animatedAmbientTop != Color.Transparent || animatedAmbientBottom != Color.Transparent)) {
+          if (ambientModeEnabled && (!isVisualizerActiveEffective || showInPlaceLyrics) && (animatedAmbientTop != Color.Transparent || animatedAmbientBottom != Color.Transparent)) {
             val topColor = animatedAmbientTop
             val bottomColor = animatedAmbientBottom
             val radialGradient = Brush.radialGradient(
@@ -997,7 +999,13 @@ fun AudioPlayerControls(
             .combinedClickable(
               interactionSource = remember { MutableInteractionSource() },
               indication = null,
-              onClick = { viewModel.toggleAudioVisualizer() },
+              onClick = {
+                if (audioVisualizerStyle == AudioVisualizerStyle.None) {
+                  onOpenSheet(Sheets.VisualizerStyle)
+                } else {
+                  viewModel.toggleAudioVisualizer()
+                }
+              },
               onLongClick = { onOpenSheet(Sheets.VisualizerStyle) },
             ),
         contentAlignment = Alignment.Center,
@@ -1014,7 +1022,7 @@ fun AudioPlayerControls(
           )
         } else {
           AnimatedContent(
-            targetState = showVisualizer,
+            targetState = isVisualizerActiveEffective,
             transitionSpec = {
               if (targetState) {
                 (fadeIn(animationSpec = tween(350, easing = FastOutSlowInEasing)) +
@@ -1041,6 +1049,7 @@ fun AudioPlayerControls(
               contentAlignment = Alignment.Center,
             ) {
                when (audioVisualizerStyle) {
+                 AudioVisualizerStyle.None -> Unit
                  AudioVisualizerStyle.Galaxy ->
                    GalaxyOverlay(
                      palette = palette,
@@ -1087,8 +1096,8 @@ fun AudioPlayerControls(
             Box(
               modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(showVisualizer, containerWidthPx) {
-                  if (showVisualizer || containerWidthPx <= 0f) return@pointerInput
+                .pointerInput(isVisualizerActiveEffective, containerWidthPx) {
+                  if (isVisualizerActiveEffective || containerWidthPx <= 0f) return@pointerInput
                   detectHorizontalDragGestures(
                     onDragStart = {
                       coroutineScope.launch { animatableOffsetX.snapTo(0f) }
@@ -1205,7 +1214,7 @@ fun AudioPlayerControls(
     }
 
     val landscapeArtworkMetadataView = @Composable {
-      if (!showVisualizer) {
+      if (!isVisualizerActiveEffective) {
         val displayTitle = remember(lastValidTitle, displayArtist) {
           cleanSongTitle(lastValidTitle, displayArtist)
         }
@@ -1683,14 +1692,20 @@ fun AudioPlayerControls(
                 )
               }
               ReactiveIconButton(
-                onClick = { viewModel.toggleAudioVisualizer() },
+                onClick = {
+                  if (audioVisualizerStyle == AudioVisualizerStyle.None) {
+                    onOpenSheet(Sheets.VisualizerStyle)
+                  } else {
+                    viewModel.toggleAudioVisualizer()
+                  }
+                },
                 onLongClick = { onOpenSheet(Sheets.VisualizerStyle) },
                 modifier = Modifier.size(if (isPortrait) 40.dp else 48.dp),
               ) {
                 Icon(
-                  imageVector = if (showVisualizer) Icons.RoundedFilled.AutoAwesome else Icons.RoundedFilled.Audiotrack,
+                  imageVector = if (isVisualizerActiveEffective) Icons.RoundedFilled.AutoAwesome else Icons.RoundedFilled.Audiotrack,
                   contentDescription = null,
-                  tint = if (showVisualizer) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                  tint = if (isVisualizerActiveEffective) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                   modifier = Modifier.size(if (isPortrait) 24.dp else 28.dp),
                 )
               }
@@ -1710,18 +1725,6 @@ fun AudioPlayerControls(
                   contentDescription = stringResource(R.string.btn_label_background_playback),
                   tint = if (backgroundPlaybackEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-              }
-              if (chapters.isNotEmpty()) {
-                ReactiveIconButton(
-                  onClick = { onOpenSheet(Sheets.Chapters) },
-                  modifier = Modifier.size(40.dp),
-                ) {
-                  Icon(
-                    imageVector = Icons.RoundedFilled.Bookmarks,
-                    contentDescription = stringResource(R.string.btn_label_chapter),
-                    tint = MaterialTheme.colorScheme.primary,
-                  )
-                }
               }
             }
           }
@@ -1778,14 +1781,20 @@ fun AudioPlayerControls(
                 )
               }
               ReactiveIconButton(
-                onClick = { viewModel.toggleAudioVisualizer() },
+                onClick = {
+                  if (audioVisualizerStyle == AudioVisualizerStyle.None) {
+                    onOpenSheet(Sheets.VisualizerStyle)
+                  } else {
+                    viewModel.toggleAudioVisualizer()
+                  }
+                },
                 onLongClick = { onOpenSheet(Sheets.VisualizerStyle) },
                 modifier = Modifier.size(if (isPortrait) 40.dp else 48.dp),
               ) {
                 Icon(
-                  imageVector = if (showVisualizer) Icons.RoundedFilled.AutoAwesome else Icons.RoundedFilled.Audiotrack,
+                  imageVector = if (isVisualizerActiveEffective) Icons.RoundedFilled.AutoAwesome else Icons.RoundedFilled.Audiotrack,
                   contentDescription = null,
-                  tint = if (showVisualizer) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                  tint = if (isVisualizerActiveEffective) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                   modifier = Modifier.size(if (isPortrait) 24.dp else 28.dp),
                 )
               }
@@ -1815,18 +1824,6 @@ fun AudioPlayerControls(
                   contentDescription = stringResource(R.string.btn_label_background_playback),
                   tint = if (backgroundPlaybackEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-              }
-              if (chapters.isNotEmpty()) {
-                ReactiveIconButton(
-                  onClick = { onOpenSheet(Sheets.Chapters) },
-                  modifier = Modifier.size(40.dp),
-                ) {
-                  Icon(
-                    imageVector = Icons.RoundedFilled.Bookmarks,
-                    contentDescription = stringResource(R.string.btn_label_chapter),
-                    tint = MaterialTheme.colorScheme.primary,
-                  )
-                }
               }
             }
           }
