@@ -4467,6 +4467,7 @@ class PlayerViewModel : ViewModel(),
         hostOrNull?.media3SeekBy(offset.toLong() * 1000L)
       }
       return
+    }
     coalesceSeek(offset)
   }
 
