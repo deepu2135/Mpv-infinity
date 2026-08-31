@@ -155,7 +155,7 @@ jobs:
               if not source.is_file():
                   raise SystemExit(f"Missing signed APK for {public_name}: {source}")
 
-              name = f"Mpv∞-preview-r{commit_count}-{public_name}.apk"
+              name = f"Mpv-preview-r{commit_count}-{public_name}.apk"
               destination = downloads_dir / name
               shutil.copy2(source, destination)
 
@@ -170,7 +170,7 @@ jobs:
 
           manifest = {
               "tag_name": f"preview-r{commit_count}",
-              "name": f"Mpv∞ Preview r{commit_count}",
+              "name": f"Mpv Preview r{commit_count}",
               "body": (
                   f"Manually published preview from workflow run #{run_number}. "
                   f"Source commit: {source_sha[:7]}."
