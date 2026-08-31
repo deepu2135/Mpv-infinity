@@ -1000,9 +1000,7 @@ fun AudioPlayerControls(
               interactionSource = remember { MutableInteractionSource() },
               indication = null,
               onClick = {
-                if (audioVisualizerStyle == AudioVisualizerStyle.None) {
-                  onOpenSheet(Sheets.VisualizerStyle)
-                } else {
+                if (audioVisualizerStyle != AudioVisualizerStyle.None) {
                   viewModel.toggleAudioVisualizer()
                 }
               },
@@ -1693,9 +1691,7 @@ fun AudioPlayerControls(
               }
               ReactiveIconButton(
                 onClick = {
-                  if (audioVisualizerStyle == AudioVisualizerStyle.None) {
-                    onOpenSheet(Sheets.VisualizerStyle)
-                  } else {
+                  if (audioVisualizerStyle != AudioVisualizerStyle.None) {
                     viewModel.toggleAudioVisualizer()
                   }
                 },
@@ -1782,9 +1778,7 @@ fun AudioPlayerControls(
               }
               ReactiveIconButton(
                 onClick = {
-                  if (audioVisualizerStyle == AudioVisualizerStyle.None) {
-                    onOpenSheet(Sheets.VisualizerStyle)
-                  } else {
+                  if (audioVisualizerStyle != AudioVisualizerStyle.None) {
                     viewModel.toggleAudioVisualizer()
                   }
                 },
