@@ -12,6 +12,7 @@ package app.infinity.mpvz.presentation.components
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.net.Uri
 import android.util.LruCache
 import androidx.compose.foundation.Image
 import androidx.compose.runtime.Composable
@@ -87,7 +88,34 @@ private object RemoteImageLoader {
     client: OkHttpClient,
     url: String,
   ): Bitmap? {
+    if (url.isBlank()) return null
     getFromMemory(url)?.let { return it }
+
+    val parsedUri = runCatching { Uri.parse(url) }.getOrNull()
+    val scheme = parsedUri?.scheme?.lowercase()
+
+    if (scheme == "content" || scheme == "file" || scheme == "android.resource") {
+      val bitmap =
+        runCatching {
+          if (scheme == "file") {
+            val path = parsedUri.path
+            if (!path.isNullOrBlank()) decodeSampled(File(path)) else null
+          } else {
+            context.contentResolver.openInputStream(parsedUri)?.use { stream ->
+              decodeSampled(stream.readBytes())
+            }
+          }
+        }.getOrNull()
+
+      if (bitmap != null) {
+        synchronized(memoryCache) { memoryCache.put(url, bitmap) }
+      }
+      return bitmap
+    }
+
+    if (scheme != "http" && scheme != "https") {
+      return null
+    }
 
     val cacheDirectory = File(context.cacheDir, CACHE_DIRECTORY).apply { mkdirs() }
     val cacheFile = File(cacheDirectory, hash(url))
@@ -98,12 +126,14 @@ private object RemoteImageLoader {
 
     val host = runCatching { java.net.URI(url).host }.getOrNull()
     val request =
-      Request
-        .Builder()
-        .url(url)
-        .header("User-Agent", "Mozilla/5.0 (Android) mpvRx")
-        .apply { if (!host.isNullOrBlank()) header("Referer", "https://$host") }
-        .build()
+      runCatching {
+        Request
+          .Builder()
+          .url(url)
+          .header("User-Agent", "Mozilla/5.0 (Android) mpvRx")
+          .apply { if (!host.isNullOrBlank()) header("Referer", "https://$host") }
+          .build()
+      }.getOrNull() ?: return null
 
     return runCatching {
       client.newCall(request).execute().use { response ->
@@ -115,6 +145,27 @@ private object RemoteImageLoader {
         }
       }
     }.getOrNull()
+  }
+
+  private fun decodeSampled(bytes: ByteArray): Bitmap? {
+    if (bytes.isEmpty()) return null
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+
+    var sampleSize = 1
+    while (maxOf(bounds.outWidth, bounds.outHeight) / (sampleSize * 2) >= MAX_IMAGE_DIMENSION) {
+      sampleSize *= 2
+    }
+    return BitmapFactory.decodeByteArray(
+      bytes,
+      0,
+      bytes.size,
+      BitmapFactory.Options().apply {
+        inSampleSize = sampleSize
+        inPreferredConfig = Bitmap.Config.RGB_565
+      },
+    )
   }
 
   private fun decodeSampled(file: File): Bitmap? {
