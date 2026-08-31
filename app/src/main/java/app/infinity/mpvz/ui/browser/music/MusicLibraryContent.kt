@@ -4,6 +4,7 @@
 
 package app.infinity.mpvz.ui.browser.music
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.text.format.DateUtils
@@ -839,7 +840,7 @@ fun MusicLibraryContent(
                     .background(MaterialTheme.colorScheme.surfaceVariant),
                   contentAlignment = Alignment.Center
                 ) {
-                  LocalAlbumArtImage(uri = song.albumArtUri, contentDescription = null, modifier = Modifier.fillMaxSize())
+                  LocalAlbumArtImage(song = song, contentDescription = null, modifier = Modifier.fillMaxSize())
                 }
                 Spacer(modifier = Modifier.width(14.dp))
                 Column(modifier = Modifier.weight(1f)) {
@@ -1219,29 +1220,79 @@ fun MusicLibraryContent(
   }
 }
 
+private object MusicArtMemoryCache {
+  private val maxMemoryKb = (Runtime.getRuntime().maxMemory() / 1024L).toInt()
+  private val cacheSizeKb = (maxMemoryKb / 8).coerceIn(8 * 1024, 64 * 1024)
+  val cache = object : android.util.LruCache<String, ImageBitmap>(cacheSizeKb) {
+    override fun sizeOf(key: String, value: ImageBitmap): Int {
+      return (value.width * value.height * 4) / 1024
+    }
+  }
+}
+
 @Composable
 private fun LocalAlbumArtImage(
-  uri: Uri?,
-  contentDescription: String?,
-  modifier: Modifier = Modifier
+  modifier: Modifier = Modifier,
+  song: MusicSong? = null,
+  uri: Uri? = song?.albumArtUri,
+  contentDescription: String? = null,
 ) {
   val context = LocalContext.current
-  var bitmap by remember(uri) { mutableStateOf<ImageBitmap?>(null) }
+  val cacheKey = song?.path?.takeIf { it.isNotBlank() } ?: song?.uri?.toString() ?: uri?.toString()
 
-  LaunchedEffect(uri) {
-    if (uri != null) {
-      bitmap = withContext(Dispatchers.IO) {
-        try {
-          context.contentResolver.openInputStream(uri)?.use { stream ->
-            BitmapFactory.decodeStream(stream)?.asImageBitmap()
+  var bitmap by remember(cacheKey) {
+    mutableStateOf(cacheKey?.let { MusicArtMemoryCache.cache.get(it) })
+  }
+
+  LaunchedEffect(cacheKey) {
+    if (bitmap != null || cacheKey == null) return@LaunchedEffect
+    val loaded = withContext(Dispatchers.IO) {
+      // 1. If song is provided and has path, extract its embedded picture
+      var result: Bitmap? = null
+      val songPath = song?.path
+      if (!songPath.isNullOrBlank()) {
+        result = runCatching {
+          val retriever = android.media.MediaMetadataRetriever()
+          try {
+            retriever.setDataSource(songPath)
+            val pic = retriever.embeddedPicture
+            if (pic != null && pic.isNotEmpty()) {
+              BitmapFactory.decodeByteArray(pic, 0, pic.size)
+            } else {
+              null
+            }
+          } finally {
+            runCatching { retriever.release() }
           }
-        } catch (e: Exception) {
-          null
+        }.getOrNull()
+      }
+
+      // 2. If song is provided and has uri, try MediaStore loadThumbnail on Android 10+
+      if (result == null && song != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q && song.uri != Uri.EMPTY) {
+        result = runCatching {
+          context.contentResolver.loadThumbnail(song.uri, android.util.Size(512, 512), null)
+        }.getOrNull()
+      }
+
+      // 3. If uri is provided (e.g. album art uri) and it's not a generic album bucket, decode from uri
+      if (result == null && uri != null) {
+        val isGeneric = if (song != null) MusicLibraryScanner.isGenericAlbumName(song.album, song.path) else false
+        if (!isGeneric) {
+          result = runCatching {
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+              BitmapFactory.decodeStream(stream)
+            }
+          }.getOrNull()
         }
       }
-    } else {
-      bitmap = null
+
+      val imageBitmap = result?.asImageBitmap()
+      if (imageBitmap != null) {
+        MusicArtMemoryCache.cache.put(cacheKey, imageBitmap)
+      }
+      imageBitmap
     }
+    bitmap = loaded
   }
 
   val loaded = bitmap
@@ -1418,7 +1469,7 @@ private fun SongGridCard(
         contentAlignment = Alignment.Center
       ) {
         LocalAlbumArtImage(
-          uri = song.albumArtUri,
+          song = song,
           contentDescription = null,
           modifier = Modifier.fillMaxSize()
         )
@@ -1534,7 +1585,7 @@ private fun SongListItem(
         contentAlignment = Alignment.Center
       ) {
         LocalAlbumArtImage(
-          uri = song.albumArtUri,
+          song = song,
           contentDescription = null,
           modifier = Modifier.fillMaxSize()
         )

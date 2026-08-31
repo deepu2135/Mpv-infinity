@@ -236,13 +236,14 @@ class MusicLibraryViewModel : ViewModel(), KoinComponent {
       .groupBy { song -> if (song.albumId > 0) song.albumId else song.album.hashCode().toLong() }
       .map { (albumId, albumSongs) ->
         val firstSong = albumSongs.first()
+        val isGeneric = MusicLibraryScanner.isGenericAlbumName(firstSong.album, firstSong.path)
         MusicAlbum(
           id = albumId,
           title = firstSong.album,
           artist = firstSong.artist,
           songCount = albumSongs.size,
           year = albumSongs.maxOfOrNull { it.year } ?: 0,
-          albumArtUri = firstSong.albumArtUri,
+          albumArtUri = if (!isGeneric) firstSong.albumArtUri else null,
         )
       }
       .sortedBy { it.title.lowercase() }

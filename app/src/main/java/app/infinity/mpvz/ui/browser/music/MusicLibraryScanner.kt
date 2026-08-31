@@ -99,7 +99,8 @@ object MusicLibraryScanner {
           val size = cursor.getLong(sizeCol)
 
           val contentUri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
-          val albumArtUri = if (albumId > 0) ContentUris.withAppendedId(ALBUM_ART_BASE_URI, albumId) else null
+          val isGenericAlbum = isGenericAlbumName(album, path)
+          val albumArtUri = if (albumId > 0 && !isGenericAlbum) ContentUris.withAppendedId(ALBUM_ART_BASE_URI, albumId) else null
 
           val isAudiobookCol = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
             cursor.getColumnIndex(MediaStore.Audio.Media.IS_AUDIOBOOK)
@@ -246,19 +247,45 @@ object MusicLibraryScanner {
     return b0 or (b1 shl 8) or (b2 shl 16) or (b3 shl 24)
   }
 
+  private val GENERIC_ALBUM_NAMES = setOf(
+    "unknown album", "unknown", "<unknown>", "download", "downloads",
+    "music", "audio", "telegram", "whatsapp", "whatsapp audio",
+    "bluetooth", "recordings", "podcasts", "notifications", "ringtones",
+    "alarms", "sdcard", "internal storage", "storage"
+  )
+
+  fun isGenericAlbumName(album: String?, path: String?): Boolean {
+    if (album.isNullOrBlank()) return true
+    val lower = album.trim().lowercase(java.util.Locale.ROOT)
+    if (lower in GENERIC_ALBUM_NAMES) return true
+    if (path != null) {
+      val parentName = File(path).parentFile?.name?.trim()?.lowercase(java.util.Locale.ROOT)
+      if (parentName != null && parentName == lower) {
+        return true
+      }
+    }
+    return false
+  }
+
   suspend fun scanAlbums(context: Context, songs: List<MusicSong>): List<MusicAlbum> = withContext(Dispatchers.IO) {
     if (songs.isNotEmpty()) {
       // Group songs by albumId/album title for exact matching
       songs.groupBy { if (it.albumId > 0) it.albumId else it.album.hashCode().toLong() }
         .map { (albumId, albumSongs) ->
           val firstSong = albumSongs.first()
+          val isGeneric = isGenericAlbumName(firstSong.album, firstSong.path)
+          val albumArt = if (!isGeneric) {
+            firstSong.albumArtUri ?: ContentUris.withAppendedId(ALBUM_ART_BASE_URI, albumId)
+          } else {
+            null
+          }
           MusicAlbum(
             id = albumId,
             title = firstSong.album,
             artist = firstSong.artist,
             songCount = albumSongs.size,
             year = albumSongs.maxOfOrNull { it.year } ?: 0,
-            albumArtUri = firstSong.albumArtUri
+            albumArtUri = albumArt
           )
         }
         .sortedBy { it.title.lowercase() }
