@@ -610,7 +610,15 @@ object AdvancedPreferencesScreen : Screen {
 
                 ListPreference(
                   value = torrentReadAheadBytes,
-                  onValueChange = preferences.torrentReadAheadBytes::set,
+                  onValueChange = { newReadAhead ->
+                    preferences.torrentReadAheadBytes.set(newReadAhead)
+                    if (preferences.torrentBufferWindowBytes.get() < newReadAhead) {
+                      preferences.torrentBufferWindowBytes.set(newReadAhead)
+                    }
+                    val demuxerCacheMiB = (preferences.torrentBufferWindowBytes.get() / (1024L * 1024L)).coerceAtLeast(64L)
+                    PlaybackSession.setPropertyString("demuxer-max-bytes", "${demuxerCacheMiB}MiB")
+                    PlaybackSession.setPropertyString("demuxer-max-back-bytes", "${(demuxerCacheMiB / 4).coerceIn(16L, 128L)}MiB")
+                  },
                   values = readAheadOptions,
                   valueToText = { bytes ->
                     AnnotatedString("${bytes / (1024L * 1024L)} MB")
@@ -639,7 +647,15 @@ object AdvancedPreferencesScreen : Screen {
 
                 ListPreference(
                   value = torrentBufferWindowBytes,
-                  onValueChange = preferences.torrentBufferWindowBytes::set,
+                  onValueChange = { newBufferWindow ->
+                    preferences.torrentBufferWindowBytes.set(newBufferWindow)
+                    if (preferences.torrentReadAheadBytes.get() > newBufferWindow) {
+                      preferences.torrentReadAheadBytes.set(newBufferWindow)
+                    }
+                    val demuxerCacheMiB = (newBufferWindow / (1024L * 1024L)).coerceAtLeast(64L)
+                    PlaybackSession.setPropertyString("demuxer-max-bytes", "${demuxerCacheMiB}MiB")
+                    PlaybackSession.setPropertyString("demuxer-max-back-bytes", "${(demuxerCacheMiB / 4).coerceIn(16L, 128L)}MiB")
+                  },
                   values = bufferWindowOptions,
                   valueToText = { bytes ->
                     if (bytes >= 1024L * 1024L * 1024L) {

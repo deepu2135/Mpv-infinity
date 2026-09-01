@@ -73,6 +73,7 @@ val domainModule =
     single<AiClient>(named("together")) { TogetherClient(get(), get()) }
     single { SubtitleGenerationService(androidContext(), get(), get(), get(), get(), get()) }
     single { RealtimeSubtitleService(androidContext(), get(), get(), get(), get(), get()) }
+    single { app.infinity.mpvz.repository.ai.EmbeddedSubtitleTranslator(get(), get(), get()) }
     single {
       AiService(
         androidContext(),

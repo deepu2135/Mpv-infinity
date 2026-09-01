@@ -55,6 +55,43 @@ fun PlayerUpdate(
 }
 
 @Composable
+fun TranslatedSubtitleText(
+  text: String,
+  modifier: Modifier = Modifier,
+  fontSize: TextUnit = MaterialTheme.typography.bodyLarge.fontSize,
+  textColor: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.White,
+  backgroundColor: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Transparent,
+  outlineColor: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Black,
+  outlineWidth: Float = 0f,
+  shadowOffset: Float = 0f,
+  bold: Boolean = false,
+  italic: Boolean = false,
+  textAlign: TextAlign = TextAlign.Center,
+) {
+  Text(
+    text = text,
+    modifier = modifier
+      .background(
+        color = backgroundColor,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
+      )
+      .padding(horizontal = 10.dp, vertical = 4.dp),
+    color = textColor,
+    fontSize = fontSize,
+    fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
+    fontStyle = if (italic) FontStyle.Italic else FontStyle.Normal,
+    textAlign = textAlign,
+    style = MaterialTheme.typography.bodyLarge.copy(
+      shadow = Shadow(
+        color = outlineColor,
+        blurRadius = (8f + outlineWidth * 2f).coerceAtLeast(1f),
+        offset = androidx.compose.ui.geometry.Offset(0f, shadowOffset),
+      ),
+    ),
+  )
+}
+
+@Composable
 fun TextPlayerUpdate(
   text: String,
   modifier: Modifier = Modifier,

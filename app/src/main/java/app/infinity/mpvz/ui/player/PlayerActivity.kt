@@ -1240,6 +1240,7 @@ class PlayerActivity :
     binding.controls.setContent {
       MpvrxTheme {
         Box(modifier = Modifier.fillMaxSize()) {
+          val torrentState by torrentStreamingEngine.state.collectAsState()
           PlayerControls(
             viewModel = viewModel,
             onBackPress = ::handleBackPress,
@@ -1275,6 +1276,7 @@ class PlayerActivity :
                 PlaybackSession.setPropertyString("hwdec", decoder.value)
               }
             },
+            torrentStreamingState = torrentState,
             modifier = Modifier,
           )
         }
@@ -4668,6 +4670,11 @@ class PlayerActivity :
           val width = player.width.takeIf { it > 0 }?.toFloat()
           val height = player.height.takeIf { it > 0 }?.toFloat()
           applySubtitlePositions(primaryPosition, width, height)
+        }
+        if (value.isBlank()) {
+          viewModel.handleEmbeddedSubtitleCueBlank()
+        } else {
+          viewModel.translateEmbeddedSubtitleCue(value)
         }
       }
       else -> {

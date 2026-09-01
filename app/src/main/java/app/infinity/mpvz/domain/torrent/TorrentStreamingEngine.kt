@@ -277,8 +277,13 @@ class TorrentStreamingEngine(
                   firstPiece = firstPiece,
                   lastPiece = lastPiece,
                   mimeType = selected.mimeType,
-                  readAheadBytes = configuredReadAhead,
-                  bufferWindowBytes = configuredBufferWindow,
+                  readAheadBytesProvider = {
+                    advancedPreferences?.torrentReadAheadBytes?.get() ?: READ_AHEAD_BYTES
+                  },
+                  bufferWindowBytesProvider = {
+                    val readAhead = advancedPreferences?.torrentReadAheadBytes?.get() ?: READ_AHEAD_BYTES
+                    (advancedPreferences?.torrentBufferWindowBytes?.get() ?: BUFFER_WINDOW_BYTES).coerceAtLeast(readAhead)
+                  },
                 ),
             ).also { it.start() }
           proxy = startedProxy
@@ -692,19 +697,15 @@ class TorrentStreamingEngine(
     }
 
     // Initial sliding buffer window
-    val initialWindowEnd = min(
-      lastPiece.toLong(),
-      firstPiece + (configuredBufferWindow / pieceLength),
-    ).toInt()
-    val initialReadAheadEnd = min(
-      lastPiece.toLong(),
-      firstPiece + (configuredReadAhead / pieceLength),
-    ).toInt()
+    val initialWindowEnd =
+      ((fileOffset + min(selected.size - 1L, configuredBufferWindow - 1L)) / pieceLength).toInt().coerceIn(firstPiece, lastPiece)
+    val initialReadAheadEnd =
+      ((fileOffset + min(selected.size - 1L, configuredReadAhead - 1L)) / pieceLength).toInt().coerceIn(firstPiece, lastPiece)
     for (piece in firstPiece..initialWindowEnd) {
       handle.piecePriority(piece, Priority.TOP_PRIORITY)
       if (piece <= initialReadAheadEnd) {
         val offset = piece - firstPiece
-        val deadline = if (offset < 3) 0 else (offset * 40).coerceAtMost(3_000)
+        val deadline = if (offset < 3) 0 else (offset * 30).coerceAtMost(3_000)
         handle.setPieceDeadline(piece, deadline)
       }
     }

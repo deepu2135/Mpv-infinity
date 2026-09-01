@@ -35,9 +35,39 @@ class TorrentProxyServer(
     val firstPiece: Int,
     val lastPiece: Int,
     val mimeType: String,
-    val readAheadBytes: Long = READ_AHEAD_BYTES,
-    val bufferWindowBytes: Long = BUFFER_WINDOW_BYTES,
-  )
+    val readAheadBytesProvider: () -> Long = { READ_AHEAD_BYTES },
+    val bufferWindowBytesProvider: () -> Long = { BUFFER_WINDOW_BYTES },
+  ) {
+    val readAheadBytes: Long
+      get() = readAheadBytesProvider()
+
+    val bufferWindowBytes: Long
+      get() = bufferWindowBytesProvider().coerceAtLeast(readAheadBytes)
+
+    constructor(
+      handle: TorrentHandle,
+      file: File,
+      fileOffset: Long,
+      fileSize: Long,
+      pieceLength: Int,
+      firstPiece: Int,
+      lastPiece: Int,
+      mimeType: String,
+      readAheadBytes: Long,
+      bufferWindowBytes: Long,
+    ) : this(
+      handle = handle,
+      file = file,
+      fileOffset = fileOffset,
+      fileSize = fileSize,
+      pieceLength = pieceLength,
+      firstPiece = firstPiece,
+      lastPiece = lastPiece,
+      mimeType = mimeType,
+      readAheadBytesProvider = { readAheadBytes },
+      bufferWindowBytesProvider = { bufferWindowBytes },
+    )
+  }
 
   companion object {
     private const val TAG = "TorrentProxyServer"
@@ -63,6 +93,7 @@ class TorrentProxyServer(
   private val tailStart = (target.lastPiece - TAIL_PIECES_COUNT + 1).coerceAtLeast(target.firstPiece)
   private var prioritizedFrom = -1
   private var prioritizedThrough = -1
+  private var prioritizedReadAheadThrough = -1
 
   val serverUrl: String
     get() = URI("http", null, "127.0.0.1", listeningPort, route, null, null).toASCIIString()
@@ -123,24 +154,26 @@ class TorrentProxyServer(
 
   private fun prioritize(relativeOffset: Long) {
     if (!target.handle.isValid) return
+    val currentReadAhead = target.readAheadBytes
+    val currentBufferWindow = target.bufferWindowBytes
     val absoluteStart = target.fileOffset + relativeOffset
     val currentPiece = (absoluteStart / target.pieceLength).toInt().coerceIn(target.firstPiece, target.lastPiece)
     val windowEndByte =
       min(
         target.fileOffset + target.fileSize - 1L,
-        absoluteStart + target.bufferWindowBytes - 1L,
+        absoluteStart + currentBufferWindow - 1L,
       )
     val windowEndPiece = (windowEndByte / target.pieceLength).toInt().coerceIn(currentPiece, target.lastPiece)
 
     val readAheadEndByte =
       min(
         target.fileOffset + target.fileSize - 1L,
-        absoluteStart + target.readAheadBytes - 1L,
+        absoluteStart + currentReadAhead - 1L,
       )
     val readAheadEndPiece = (readAheadEndByte / target.pieceLength).toInt().coerceIn(currentPiece, target.lastPiece)
 
     synchronized(priorityLock) {
-      if (currentPiece == prioritizedFrom && windowEndPiece == prioritizedThrough) return
+      if (currentPiece == prioritizedFrom && windowEndPiece == prioritizedThrough && readAheadEndPiece == prioritizedReadAheadThrough) return
 
       // Demote pieces that were in the previous sliding window but are now outside the new window.
       // Do not demote head and tail pieces, as mpv relies on them for metadata and seeking indexes.
@@ -169,6 +202,7 @@ class TorrentProxyServer(
 
       prioritizedFrom = currentPiece
       prioritizedThrough = windowEndPiece
+      prioritizedReadAheadThrough = readAheadEndPiece
     }
   }
 
