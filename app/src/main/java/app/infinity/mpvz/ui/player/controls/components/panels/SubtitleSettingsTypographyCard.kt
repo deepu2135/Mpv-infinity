@@ -47,7 +47,6 @@ import androidx.compose.ui.unit.dp
 import app.infinity.mpvz.R
 import app.infinity.mpvz.preferences.SubtitleJustification
 import app.infinity.mpvz.preferences.SubtitlesPreferences
-import app.infinity.mpvz.preferences.preference.collectAsState
 import app.infinity.mpvz.preferences.preference.deleteAndGet
 import app.infinity.mpvz.presentation.components.ExpandableCard
 import app.infinity.mpvz.presentation.components.ExposedTextDropDownMenu
@@ -55,7 +54,6 @@ import app.infinity.mpvz.presentation.components.SliderItem
 import app.infinity.mpvz.ui.icons.Icon
 import app.infinity.mpvz.ui.icons.Icons
 import app.infinity.mpvz.ui.player.PlayerViewModel
-import app.infinity.mpvz.ui.player.applySubtitleBorderStyle
 import app.infinity.mpvz.ui.player.controls.CARDS_MAX_WIDTH
 import app.infinity.mpvz.ui.player.controls.panelCardsColors
 import app.infinity.mpvz.ui.theme.spacing
@@ -135,7 +133,13 @@ fun SubtitleSettingsTypographyCard(
       }
       val font by PlaybackSession.propString["sub-font"].collectAsState()
       val fontSize by PlaybackSession.propInt["sub-font-size"].collectAsState()
-      val borderStyle by preferences.borderStyle.collectAsState()
+      val mpvBorderStyle by PlaybackSession.propString["sub-border-style"].collectAsState()
+      val borderStyle by remember {
+        derivedStateOf {
+          SubtitlesBorderStyle.entries.firstOrNull { it.value == mpvBorderStyle }
+            ?: SubtitlesBorderStyle.OutlineAndShadow
+        }
+      }
       val borderSize by PlaybackSession.propInt["sub-outline-size"].collectAsState()
       val shadowOffset by PlaybackSession.propInt["sub-shadow-offset"].collectAsState()
       var localShadowOffset by remember(shadowOffset) {
@@ -234,9 +238,8 @@ fun SubtitleSettingsTypographyCard(
           onValueChangedEvent = {
             val actualFont = if (it == "Default") "" else it
             preferences.font.set(actualFont)
-            val mpvFont = actualFont.ifBlank { "sans-serif" }
-            PlaybackSession.setPropertyString("sub-font", mpvFont)
-            PlaybackSession.setPropertyString("secondary-sub-font", mpvFont)
+            PlaybackSession.setPropertyString("sub-font", actualFont)
+            PlaybackSession.setPropertyString("secondary-sub-font", actualFont)
             viewModel.applyNativeSubtitleStyle()
           },
           leadingIcon = fontsLoadingIndicator,
@@ -267,7 +270,8 @@ fun SubtitleSettingsTypographyCard(
           borderStyle,
           onValueChange = {
             preferences.borderStyle.set(it)
-            applySubtitleBorderStyle(preferences, it)
+            PlaybackSession.setPropertyString("sub-border-style", it.value)
+            PlaybackSession.setPropertyString("secondary-sub-border-style", it.value)
             viewModel.applyNativeSubtitleStyle()
           },
           title = { Text(stringResource(R.string.player_sheets_subtitles_border_style)) },
@@ -284,8 +288,11 @@ fun SubtitleSettingsTypographyCard(
         valueText = (borderSize ?: preferences.borderSize.get()).toString(),
         onChange = {
           preferences.borderSize.set(it)
-          applySubtitleBorderStyle(preferences)
+          PlaybackSession.setPropertyInt("sub-border-size", it)
           viewModel.applyNativeSubtitleStyle()
+          PlaybackSession.setPropertyInt("sub-outline-size", it)
+          PlaybackSession.setPropertyInt("secondary-sub-border-size", it)
+          PlaybackSession.setPropertyInt("secondary-sub-outline-size", it)
         },
         max = 20,
         icon = { Icon(Icons.RoundedFilled.BorderColor, null) },
@@ -300,7 +307,8 @@ fun SubtitleSettingsTypographyCard(
         onChange = {
           localShadowOffset = it
           preferences.shadowOffset.set(it)
-          applySubtitleBorderStyle(preferences)
+          PlaybackSession.setPropertyInt("sub-shadow-offset", it)
+          PlaybackSession.setPropertyInt("secondary-sub-shadow-offset", it)
           viewModel.applyNativeSubtitleStyle()
         },
         min = -20,
@@ -315,11 +323,11 @@ fun resetTypography(preferences: SubtitlesPreferences) {
   val bold = preferences.bold.deleteAndGet()
   val italic = preferences.italic.deleteAndGet()
   val justify = preferences.justification.deleteAndGet().value
-  val font = preferences.font.deleteAndGet().ifBlank { "sans-serif" }
+  val font = preferences.font.deleteAndGet()
   val fontSize = preferences.fontSize.deleteAndGet()
-  preferences.borderSize.delete()
-  preferences.shadowOffset.delete()
-  val borderStyle = preferences.borderStyle.deleteAndGet()
+  val borderSize = preferences.borderSize.deleteAndGet()
+  val shadowOffset = preferences.shadowOffset.deleteAndGet()
+  val borderStyle = preferences.borderStyle.deleteAndGet().value
 
   for (prefix in listOf("sub-", "secondary-sub-")) {
     PlaybackSession.setPropertyBoolean("${prefix}bold", bold)
@@ -327,8 +335,11 @@ fun resetTypography(preferences: SubtitlesPreferences) {
     PlaybackSession.setPropertyString("${prefix}justify", justify)
     PlaybackSession.setPropertyString("${prefix}font", font)
     PlaybackSession.setPropertyInt("${prefix}font-size", fontSize)
+    PlaybackSession.setPropertyInt("${prefix}border-size", borderSize)
+    PlaybackSession.setPropertyInt("${prefix}outline-size", borderSize)
+    PlaybackSession.setPropertyInt("${prefix}shadow-offset", shadowOffset)
+    PlaybackSession.setPropertyString("${prefix}border-style", borderStyle)
   }
-  applySubtitleBorderStyle(preferences, borderStyle)
   PlaybackSession.setPropertyBoolean("sub-ass-justify", false)
 }
 

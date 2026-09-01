@@ -5243,20 +5243,23 @@ class PlayerActivity :
     PlaybackSession.setPropertyString("blend-subtitles", blendMode)
 
     for (prefix in listOf("sub-", "secondary-sub-")) {
-      PlaybackSession.setPropertyString("${prefix}font", font.ifBlank { "sans-serif" })
+      PlaybackSession.setPropertyString("${prefix}font", font)
       PlaybackSession.setPropertyInt("${prefix}font-size", fontSize)
       PlaybackSession.setPropertyBoolean("${prefix}bold", bold)
       PlaybackSession.setPropertyBoolean("${prefix}italic", italic)
       PlaybackSession.setPropertyString("${prefix}justify", justify)
+      PlaybackSession.setPropertyString("${prefix}border-style", borderStyle)
+      PlaybackSession.setPropertyInt("${prefix}border-size", borderSize)
+      PlaybackSession.setPropertyInt("${prefix}outline-size", borderSize)
+      PlaybackSession.setPropertyInt("${prefix}shadow-offset", shadowOffset)
       PlaybackSession.setPropertyString("${prefix}color", textColor)
+      PlaybackSession.setPropertyString("${prefix}border-color", borderColor)
+      PlaybackSession.setPropertyString("${prefix}back-color", backgroundColor)
+      PlaybackSession.setPropertyString("${prefix}shadow-color", shadowColor)
       PlaybackSession.setPropertyString("${prefix}scale-by-window", scaleValue)
       PlaybackSession.setPropertyString("${prefix}use-margins", scaleValue)
       PlaybackSession.setPropertyFloat("${prefix}scale", subScale)
     }
-
-    applySubtitleBorderStyle(subtitlesPreferences)
-
-    PlaybackSession.setPropertyBoolean("sub-visibility", true)
 
     applySubtitleLayout(
       primaryPosition = subtitlesPreferences.subPos.get(),
@@ -5287,7 +5290,7 @@ class PlayerActivity :
     val r = (this shr 16 and 0xFF).toString(16).padStart(2, '0')
     val g = (this shr 8 and 0xFF).toString(16).padStart(2, '0')
     val b = (this and 0xFF).toString(16).padStart(2, '0')
-    return "#$r$g$b$a".uppercase()
+    return "#$a$r$g$b".uppercase()
   }
 
   private fun canIssueMpvCommands(): Boolean = mpvInitialized && !player.isExiting && !isDestroyed
