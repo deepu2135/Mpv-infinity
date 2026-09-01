@@ -6,6 +6,7 @@ package app.infinity.mpvz.domain.torrent
 
 import android.content.Context
 import android.net.Uri
+import android.os.StatFs
 import android.util.Log
 import app.infinity.mpvz.preferences.AdvancedPreferences
 import app.infinity.mpvz.utils.media.MediaInfoParser
@@ -50,19 +51,20 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
-import kotlin.math.min
 
 class TorrentStreamingEngine(
   context: Context,
-  private val advancedPreferences: AdvancedPreferences? = null,
+  private val advancedPreferences: AdvancedPreferences,
 ) {
   companion object {
     private const val TAG = "TorrentStreamingEngine"
-    private const val BUFFER_WINDOW_BYTES = 64L * 1024L * 1024L
-    private const val READ_AHEAD_BYTES = 16L * 1024L * 1024L
-    private const val HEAD_PIECES_COUNT = 16
-    private const val TAIL_PIECES_COUNT = 8
     private const val METADATA_TIMEOUT_MS = 90_000L
+    private const val INITIAL_BUFFER_TIMEOUT_MS = 45_000L
+    private const val BYTES_PER_MB = 1024L * 1024L
+    private const val MIN_BUFFER_BYTES = 8L * BYTES_PER_MB
+    // A practical two-minute startup window for typical compressed video bitrates.
+    private const val DEFAULT_STARTUP_BUFFER_MB = 64L
+    private const val STORAGE_RESERVE_BYTES = 512L * BYTES_PER_MB
     private const val MAX_METADATA_BYTES = 16L * 1024L * 1024L
     private const val MAX_TORRENT_FILES = 100_000
     private const val STATUS_INTERVAL_MS = 1_000L
@@ -186,12 +188,6 @@ class TorrentStreamingEngine(
   @Volatile
   private var closed = false
 
-  init {
-    scope.launch {
-      cleanStaleTorrentCaches()
-    }
-  }
-
   /**
    * Resolves and validates torrent metadata without downloading a media file.
    *
@@ -258,6 +254,15 @@ class TorrentStreamingEngine(
           val firstPiece = (fileOffset / pieceLength).toInt()
           val lastPiece = ((fileOffset + selected.size - 1L) / pieceLength).toInt()
           val selectedPath = safeCacheFile(preparedSession.cacheDir, selected.path)
+          waitForInitialBuffer(
+            handle = preparedSession.handle,
+            firstPiece = firstPiece,
+            lastPiece = lastPiece,
+            fileSize = selected.size,
+            pieceLength = pieceLength,
+            startGeneration = startGeneration,
+          )
+          ensureCurrent(startGeneration)
 
           val startedProxy =
             TorrentProxyServer(
@@ -271,8 +276,8 @@ class TorrentStreamingEngine(
                   firstPiece = firstPiece,
                   lastPiece = lastPiece,
                   mimeType = selected.mimeType,
-                  readAheadBytesProvider = { READ_AHEAD_BYTES },
-                  bufferWindowBytesProvider = { BUFFER_WINDOW_BYTES },
+                  readAheadBytes = readAheadBufferBytes(),
+                  cacheBudgetBytes = cacheBudgetBytes(),
                 ),
             ).also { it.start() }
           proxy = startedProxy
@@ -349,7 +354,6 @@ class TorrentStreamingEngine(
           setMaxMetadataSize(MAX_METADATA_BYTES.toInt())
           setEnableDht(true)
           setEnableLsd(true)
-          setDhtBootstrapNodes(DHT_BOOTSTRAP_NODES)
         }
       startedSession.start(SessionParams(settings))
       ensureCurrent(startGeneration)
@@ -464,10 +468,12 @@ class TorrentStreamingEngine(
       // racing onto disk before their paths and priorities have been validated.
       session.download(parsed.cleanMagnetUri, cacheDir, TorrentFlags.UPLOAD_MODE)
       val handle = waitForHandle(session, hash, startGeneration, failure)
-      DEFAULT_TORRENT_TRACKERS.forEach { tracker ->
-        runCatching { handle.addTracker(AnnounceEntry(tracker)) }
+      // Preserve explicit/private tracker policy. Public fallbacks are only appropriate when the
+      // source supplied no tracker at all.
+      if (parsed.trackers.isEmpty()) {
+        DEFAULT_TORRENT_TRACKERS.forEach { tracker -> handle.addTracker(AnnounceEntry(tracker)) }
+        handle.forceReannounce()
       }
-      handle.forceReannounce()
       val info = waitForMetadata(handle, startGeneration, failure)
       if (!info.hasV1()) throw streamError("BitTorrent v2-only torrents are not supported yet.")
       if (!info.infoHash().toHex().equals(parsed.infoHash, ignoreCase = true)) {
@@ -505,16 +511,11 @@ class TorrentStreamingEngine(
     val priorities = Array(info.files().numFiles()) { Priority.IGNORE }
 
     return monitorTorrentErrors(session) { failure ->
-      session.download(info, cacheDir, null, priorities, null, TorrentFlags.UPLOAD_MODE)
+      session.download(info, cacheDir, null, priorities, null, TorrentFlags.SEQUENTIAL_DOWNLOAD)
       val handle = waitForHandle(session, info.infoHash(), startGeneration, failure)
       endpoints.trackers.forEach { tracker -> handle.addTracker(AnnounceEntry(tracker)) }
       endpoints.webSeeds.forEach(handle::addUrlSeed)
-      if (!info.isPrivate) {
-        DEFAULT_TORRENT_TRACKERS.forEach { tracker ->
-          runCatching { handle.addTracker(AnnounceEntry(tracker)) }
-        }
-      }
-      handle.forceReannounce()
+      if (endpoints.trackers.isNotEmpty()) handle.forceReannounce()
       if (info.isPrivate && endpoints.trackers.isEmpty()) {
         throw streamError("Private torrent metadata does not contain a supported tracker.")
       }
@@ -642,71 +643,100 @@ class TorrentStreamingEngine(
     }
   }
 
+  private suspend fun waitForInitialBuffer(
+    handle: TorrentHandle,
+    firstPiece: Int,
+    lastPiece: Int,
+    fileSize: Long,
+    pieceLength: Int,
+    startGeneration: Long,
+  ) {
+    // Start once the first piece is available; the stream reader continues waiting for
+    // subsequent pieces, so a large user-configured buffer cannot block playback entirely.
+    val targetBytes = minOf(fileSize, startupBufferBytes())
+    val targetPiece =
+      (firstPiece + ((targetBytes - 1L).coerceAtLeast(0L) / pieceLength).toInt())
+        .coerceAtMost(lastPiece)
+    val deadline = System.currentTimeMillis() + INITIAL_BUFFER_TIMEOUT_MS
+    _state.value = TorrentStreamingState.Connecting("Buffering enough data to start playback...")
+    while (System.currentTimeMillis() < deadline) {
+      ensureCurrent(startGeneration)
+      if (!handle.isValid) throw streamError("Torrent session stopped before playback could start.")
+      val ready = (firstPiece..targetPiece).all(handle::havePiece)
+      if (ready) return
+      runCatching {
+        val status = handle.status()
+        _state.value = TorrentStreamingState.Connecting(
+          phase = "Buffering enough data to start playback...",
+          downloadSpeed = status.downloadPayloadRate().toLong(),
+          uploadSpeed = status.uploadPayloadRate().toLong(),
+          peers = status.numPeers(),
+          seeds = status.numSeeds(),
+        )
+      }
+      delay(250L)
+    }
+    // A slow or lightly seeded torrent must still be allowed to start once its first verified
+    // piece is available. The proxy will block only when mpv reaches data that is not ready yet.
+    // This preserves the previous build's reliable startup behavior while retaining the bounded
+    // startup/read-ahead scheduler.
+    if (handle.havePiece(firstPiece)) return
+    throw streamError("Torrent did not receive its first playable piece. Check seeders and connection speed.")
+  }
+
+  private fun availableStorageBytes(): Long =
+    StatFs(appContext.cacheDir.absolutePath).availableBytes.coerceAtLeast(0L)
+
+  private fun maximumSafeStorageBytes(): Long =
+    (availableStorageBytes() - STORAGE_RESERVE_BYTES).coerceAtLeast(MIN_BUFFER_BYTES)
+
+  private fun configuredMegabytes(value: Long): Long =
+    if (value <= 0L) maximumSafeStorageBytes() / BYTES_PER_MB
+    else value.coerceAtMost(Long.MAX_VALUE / BYTES_PER_MB)
+
+  private fun startupBufferBytes(): Long =
+    ((advancedPreferences.torrentStartupBufferMb.get().takeIf { it > 0L } ?: DEFAULT_STARTUP_BUFFER_MB) * BYTES_PER_MB)
+      .coerceAtMost(maximumSafeStorageBytes())
+      .coerceAtLeast(MIN_BUFFER_BYTES)
+
+  private fun readAheadBufferBytes(): Long =
+    (configuredMegabytes(advancedPreferences.torrentReadAheadMb.get()) * BYTES_PER_MB)
+      .coerceAtMost(maximumSafeStorageBytes())
+      .coerceAtLeast(MIN_BUFFER_BYTES)
+
+  private fun cacheBudgetBytes(): Long =
+    (configuredMegabytes(advancedPreferences.torrentCacheMb.get()) * BYTES_PER_MB)
+      .coerceAtMost(maximumSafeStorageBytes())
+      .coerceAtLeast(MIN_BUFFER_BYTES)
+
   private fun configureStreaming(
     handle: TorrentHandle,
     info: TorrentInfo,
     selected: TorrentFileItem,
   ) {
-    val configuredReadAhead = READ_AHEAD_BYTES
-    val configuredBufferWindow = BUFFER_WINDOW_BYTES
-
-    handle.unsetFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD)
-    handle.unsetFlags(TorrentFlags.AUTO_MANAGED)
-
+    handle.setFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD)
     val storage = info.files()
-    val filePriorities = Array(storage.numFiles()) { Priority.IGNORE }
-    filePriorities[selected.index] = Priority.TOP_PRIORITY
-    handle.prioritizeFiles(filePriorities)
+    val priorities = Array(storage.numFiles()) { Priority.IGNORE }
+    priorities[selected.index] = Priority.TOP_PRIORITY
+    handle.prioritizeFiles(priorities)
 
-    val numPieces = info.numPieces()
     val pieceLength = info.pieceLength().toLong()
     val fileOffset = storage.fileOffset(selected.index)
-    val firstPiece = (fileOffset / pieceLength).toInt().coerceIn(0, numPieces - 1)
-    val lastPiece = ((fileOffset + selected.size - 1L) / pieceLength).toInt().coerceIn(firstPiece, numPieces - 1)
-
-    // Clear all deadlines and set ALL pieces in the entire torrent to IGNORE first
-    val piecePriorities = Array(numPieces) { Priority.IGNORE }
-
-    // Head pieces for container header parsing
-    val headEnd = (firstPiece + HEAD_PIECES_COUNT - 1).coerceAtMost(lastPiece)
-    for (piece in firstPiece..headEnd) {
-      piecePriorities[piece] = Priority.TOP_PRIORITY
+    val firstPiece = (fileOffset / pieceLength).toInt()
+    val lastPiece = ((fileOffset + selected.size - 1L) / pieceLength).toInt()
+    val startupLastPiece =
+      (firstPiece + ((startupBufferBytes() - 1L).coerceAtLeast(0L) / pieceLength).toInt())
+        .coerceAtMost(lastPiece)
+    // Restrict sequential download to the startup window. The loopback proxy expands this
+    // window as mpv reads, so later pieces are fetched in the background rather than the entire
+    // file being scheduled immediately.
+    handle.setSequentialRange(firstPiece, startupLastPiece)
+    handle.piecePriority(firstPiece, Priority.TOP_PRIORITY)
+    handle.setPieceDeadline(firstPiece, 0)
+    for (piece in firstPiece..startupLastPiece) {
+      handle.piecePriority(piece, Priority.TOP_PRIORITY)
+      handle.setPieceDeadline(piece, ((piece - firstPiece) * 100).coerceAtMost(12_000))
     }
-
-    // Tail pieces for index / seek tables (e.g. MP4 moov, MKV cues)
-    val tailStart = (lastPiece - TAIL_PIECES_COUNT + 1).coerceAtLeast(firstPiece)
-    for (piece in tailStart..lastPiece) {
-      piecePriorities[piece] = Priority.TOP_PRIORITY
-    }
-
-    // Initial sliding buffer window
-    val initialWindowEnd =
-      ((fileOffset + min(selected.size - 1L, configuredBufferWindow - 1L)) / pieceLength).toInt().coerceIn(firstPiece, lastPiece)
-    val initialReadAheadEnd =
-      ((fileOffset + min(selected.size - 1L, configuredReadAhead - 1L)) / pieceLength).toInt().coerceIn(firstPiece, lastPiece)
-    for (piece in firstPiece..initialWindowEnd) {
-      piecePriorities[piece] = Priority.TOP_PRIORITY
-    }
-
-    handle.prioritizePieces(piecePriorities)
-
-    // Set deadlines only on urgent read-ahead and head/tail pieces
-    for (piece in firstPiece..headEnd) {
-      val offset = piece - firstPiece
-      val deadline = if (offset < 3) 0 else (offset * 30).coerceAtMost(2_000)
-      handle.setPieceDeadline(piece, deadline)
-    }
-
-    for (piece in tailStart..lastPiece) {
-      handle.setPieceDeadline(piece, 0)
-    }
-
-    for (piece in firstPiece..initialReadAheadEnd) {
-      val offset = piece - firstPiece
-      val deadline = if (offset < 3) 0 else (offset * 30).coerceAtMost(3_000)
-      handle.setPieceDeadline(piece, deadline)
-    }
-
     handle.unsetFlags(TorrentFlags.UPLOAD_MODE)
     handle.resume()
   }
@@ -850,8 +880,10 @@ class TorrentStreamingEngine(
       runCatching { session.remove(handle, SessionHandle.DELETE_FILES) }
     }
     runCatching { session.stop() }
-    deleteDirectoryWithRetries(cacheDir)
-    cleanStaleTorrentCaches()
+    if (cacheDir.exists() && !cacheDir.deleteRecursively()) {
+      Log.w(TAG, "Torrent cache cleanup did not remove every file")
+    }
+    cacheDir.parentFile?.takeIf { it.isDirectory && it.list().isNullOrEmpty() }?.delete()
   }
 
   private fun cleanupAfterPreparationFailure(
@@ -863,46 +895,8 @@ class TorrentStreamingEngine(
       cleanup(session, handle, cacheDir)
       return
     }
-    deleteDirectoryWithRetries(cacheDir)
-    cleanStaleTorrentCaches()
-  }
-
-  private fun deleteDirectoryWithRetries(dir: File) {
-    if (!dir.exists()) return
-    for (attempt in 1..5) {
-      if (dir.deleteRecursively()) return
-      try {
-        Thread.sleep(50L * attempt)
-      } catch (_: InterruptedException) {
-        break
-      }
-    }
-    if (dir.exists()) {
-      runCatching {
-        dir.walkBottomUp().forEach { file ->
-          if (!file.delete()) {
-            file.deleteOnExit()
-          }
-        }
-      }
-      Log.w(TAG, "Torrent cache cleanup did not remove every file in ${dir.path}")
-    }
-    dir.parentFile?.takeIf { it.isDirectory && it.list().isNullOrEmpty() }?.delete()
-  }
-
-  fun cleanStaleTorrentCaches() {
-    val baseDir = File(appContext.cacheDir, "torrent_streaming")
-    if (!baseDir.exists() || !baseDir.isDirectory) return
-    val activeDirCanonical = runCatching { active?.cacheDir?.canonicalPath }.getOrNull()
-    val preparedDirCanonical = runCatching { prepared?.cacheDir?.canonicalPath }.getOrNull()
-    baseDir.listFiles()?.forEach { file ->
-      val path = runCatching { file.canonicalPath }.getOrNull()
-      if (path != null && path != activeDirCanonical && path != preparedDirCanonical) {
-        runCatching { file.deleteRecursively() }
-      }
-    }
-    if (baseDir.list().isNullOrEmpty()) {
-      runCatching { baseDir.delete() }
+    if (cacheDir.exists() && !cacheDir.deleteRecursively()) {
+      Log.w(TAG, "Torrent cache cleanup did not remove every file")
     }
   }
 

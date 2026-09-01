@@ -103,14 +103,8 @@ val DEFAULT_TORRENT_TRACKERS =
     "udp://explodie.org:6969/announce",
     "udp://tracker.openbittorrent.com:6969/announce",
     "udp://p4p.arenabg.com:1337/announce",
-    "udp://tracker.tiny-vps.com:6969/announce",
-    "udp://tracker.internetwarriors.net:1337/announce",
     "https://tracker.opentrackr.org:443/announce",
-    "https://opentracker.i2p.rocks:443/announce",
   )
-
-const val DHT_BOOTSTRAP_NODES =
-  "router.bittorrent.com:6881,dht.transmissionbt.com:6881,router.utorrent.com:6881,dht.aelitis.com:6881,dht.libtorrent.org:25401"
 
 private val v1HexHash = Regex("^[0-9a-fA-F]{40}$")
 private val v2HexHash = Regex("^[0-9a-fA-F]{64}$")
