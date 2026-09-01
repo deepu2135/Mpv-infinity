@@ -261,15 +261,10 @@ class MPVView(
     PlaybackSession.setOptionString("http-allow-redirect", "yes")
     PlaybackSession.setOptionString("cookies", "yes")
     PlaybackSession.setOptionString("cookies-file", AndroidCookieJar.playbackCookieFile(context).absolutePath)
-    val configuredBufferWindowBytes = advancedPreferences.torrentBufferWindowBytes.get()
-    val demuxerCacheMiB = (configuredBufferWindowBytes / (1024L * 1024L)).coerceAtLeast(64L)
-    PlaybackSession.setOptionString("cache", "yes")
+    PlaybackSession.setOptionString("cache", "auto")
     PlaybackSession.setOptionString("cache-pause", "yes")
-    PlaybackSession.setOptionString("cache-pause-wait", "1")
-    PlaybackSession.setOptionString("demuxer-max-bytes", "${demuxerCacheMiB}MiB")
-    PlaybackSession.setOptionString("demuxer-max-back-bytes", "${(demuxerCacheMiB / 4).coerceIn(16L, 128L)}MiB")
-    PlaybackSession.setOptionString("cache-secs", "120")
-    PlaybackSession.setOptionString("demuxer-readahead-secs", "120")
+    PlaybackSession.setOptionString("cache-pause-wait", "2")
+    PlaybackSession.setOptionString("demuxer-max-bytes", "64MiB")
     // Recover boundedly from transient HTTP/TLS disconnects, including non-seekable live inputs.
     // Do not use reconnect_at_eof globally: a legitimate VOD EOF must still finish normally.
     PlaybackSession.setOptionString(

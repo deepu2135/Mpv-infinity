@@ -259,12 +259,6 @@ class TorrentStreamingEngine(
           val lastPiece = ((fileOffset + selected.size - 1L) / pieceLength).toInt()
           val selectedPath = safeCacheFile(preparedSession.cacheDir, selected.path)
 
-          val configuredReadAhead =
-            advancedPreferences?.torrentReadAheadBytes?.get() ?: READ_AHEAD_BYTES
-          val configuredBufferWindow =
-            (advancedPreferences?.torrentBufferWindowBytes?.get() ?: BUFFER_WINDOW_BYTES)
-              .coerceAtLeast(configuredReadAhead)
-
           val startedProxy =
             TorrentProxyServer(
               target =
@@ -277,13 +271,8 @@ class TorrentStreamingEngine(
                   firstPiece = firstPiece,
                   lastPiece = lastPiece,
                   mimeType = selected.mimeType,
-                  readAheadBytesProvider = {
-                    advancedPreferences?.torrentReadAheadBytes?.get() ?: READ_AHEAD_BYTES
-                  },
-                  bufferWindowBytesProvider = {
-                    val readAhead = advancedPreferences?.torrentReadAheadBytes?.get() ?: READ_AHEAD_BYTES
-                    (advancedPreferences?.torrentBufferWindowBytes?.get() ?: BUFFER_WINDOW_BYTES).coerceAtLeast(readAhead)
-                  },
+                  readAheadBytesProvider = { READ_AHEAD_BYTES },
+                  bufferWindowBytesProvider = { BUFFER_WINDOW_BYTES },
                 ),
             ).also { it.start() }
           proxy = startedProxy
@@ -658,11 +647,8 @@ class TorrentStreamingEngine(
     info: TorrentInfo,
     selected: TorrentFileItem,
   ) {
-    val configuredReadAhead =
-      advancedPreferences?.torrentReadAheadBytes?.get() ?: READ_AHEAD_BYTES
-    val configuredBufferWindow =
-      (advancedPreferences?.torrentBufferWindowBytes?.get() ?: BUFFER_WINDOW_BYTES)
-        .coerceAtLeast(configuredReadAhead)
+    val configuredReadAhead = READ_AHEAD_BYTES
+    val configuredBufferWindow = BUFFER_WINDOW_BYTES
 
     handle.unsetFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD)
     handle.unsetFlags(TorrentFlags.AUTO_MANAGED)
