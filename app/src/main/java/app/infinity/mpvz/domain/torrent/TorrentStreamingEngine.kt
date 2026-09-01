@@ -665,35 +665,32 @@ class TorrentStreamingEngine(
         .coerceAtLeast(configuredReadAhead)
 
     handle.unsetFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD)
-    val storage = info.files()
-    val priorities = Array(storage.numFiles()) { Priority.IGNORE }
-    priorities[selected.index] = Priority.TOP_PRIORITY
-    handle.prioritizeFiles(priorities)
+    handle.unsetFlags(TorrentFlags.AUTO_MANAGED)
 
+    val storage = info.files()
+    val filePriorities = Array(storage.numFiles()) { Priority.IGNORE }
+    filePriorities[selected.index] = Priority.TOP_PRIORITY
+    handle.prioritizeFiles(filePriorities)
+
+    val numPieces = info.numPieces()
     val pieceLength = info.pieceLength().toLong()
     val fileOffset = storage.fileOffset(selected.index)
-    val firstPiece = (fileOffset / pieceLength).toInt()
-    val lastPiece = ((fileOffset + selected.size - 1L) / pieceLength).toInt()
+    val firstPiece = (fileOffset / pieceLength).toInt().coerceIn(0, numPieces - 1)
+    val lastPiece = ((fileOffset + selected.size - 1L) / pieceLength).toInt().coerceIn(firstPiece, numPieces - 1)
 
-    // Reset all pieces of the selected file to IGNORE so downloading is constrained to the buffer window.
-    for (piece in firstPiece..lastPiece) {
-      handle.piecePriority(piece, Priority.IGNORE)
-    }
+    // Clear all deadlines and set ALL pieces in the entire torrent to IGNORE first
+    val piecePriorities = Array(numPieces) { Priority.IGNORE }
 
     // Head pieces for container header parsing
     val headEnd = (firstPiece + HEAD_PIECES_COUNT - 1).coerceAtMost(lastPiece)
     for (piece in firstPiece..headEnd) {
-      handle.piecePriority(piece, Priority.TOP_PRIORITY)
-      val offset = piece - firstPiece
-      val deadline = if (offset < 3) 0 else (offset * 30).coerceAtMost(2_000)
-      handle.setPieceDeadline(piece, deadline)
+      piecePriorities[piece] = Priority.TOP_PRIORITY
     }
 
     // Tail pieces for index / seek tables (e.g. MP4 moov, MKV cues)
     val tailStart = (lastPiece - TAIL_PIECES_COUNT + 1).coerceAtLeast(firstPiece)
     for (piece in tailStart..lastPiece) {
-      handle.piecePriority(piece, Priority.TOP_PRIORITY)
-      handle.setPieceDeadline(piece, 0)
+      piecePriorities[piece] = Priority.TOP_PRIORITY
     }
 
     // Initial sliding buffer window
@@ -702,12 +699,26 @@ class TorrentStreamingEngine(
     val initialReadAheadEnd =
       ((fileOffset + min(selected.size - 1L, configuredReadAhead - 1L)) / pieceLength).toInt().coerceIn(firstPiece, lastPiece)
     for (piece in firstPiece..initialWindowEnd) {
-      handle.piecePriority(piece, Priority.TOP_PRIORITY)
-      if (piece <= initialReadAheadEnd) {
-        val offset = piece - firstPiece
-        val deadline = if (offset < 3) 0 else (offset * 30).coerceAtMost(3_000)
-        handle.setPieceDeadline(piece, deadline)
-      }
+      piecePriorities[piece] = Priority.TOP_PRIORITY
+    }
+
+    handle.prioritizePieces(piecePriorities)
+
+    // Set deadlines only on urgent read-ahead and head/tail pieces
+    for (piece in firstPiece..headEnd) {
+      val offset = piece - firstPiece
+      val deadline = if (offset < 3) 0 else (offset * 30).coerceAtMost(2_000)
+      handle.setPieceDeadline(piece, deadline)
+    }
+
+    for (piece in tailStart..lastPiece) {
+      handle.setPieceDeadline(piece, 0)
+    }
+
+    for (piece in firstPiece..initialReadAheadEnd) {
+      val offset = piece - firstPiece
+      val deadline = if (offset < 3) 0 else (offset * 30).coerceAtMost(3_000)
+      handle.setPieceDeadline(piece, deadline)
     }
 
     handle.unsetFlags(TorrentFlags.UPLOAD_MODE)

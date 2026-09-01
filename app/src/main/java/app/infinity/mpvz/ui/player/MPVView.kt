@@ -268,8 +268,8 @@ class MPVView(
     PlaybackSession.setOptionString("cache-pause-wait", "1")
     PlaybackSession.setOptionString("demuxer-max-bytes", "${demuxerCacheMiB}MiB")
     PlaybackSession.setOptionString("demuxer-max-back-bytes", "${(demuxerCacheMiB / 4).coerceIn(16L, 128L)}MiB")
-    PlaybackSession.setOptionString("cache-secs", "1000000000")
-    PlaybackSession.setOptionString("demuxer-readahead-secs", "1000000000")
+    PlaybackSession.setOptionString("cache-secs", "120")
+    PlaybackSession.setOptionString("demuxer-readahead-secs", "120")
     // Recover boundedly from transient HTTP/TLS disconnects, including non-seekable live inputs.
     // Do not use reconnect_at_eof globally: a legitimate VOD EOF must still finish normally.
     PlaybackSession.setOptionString(

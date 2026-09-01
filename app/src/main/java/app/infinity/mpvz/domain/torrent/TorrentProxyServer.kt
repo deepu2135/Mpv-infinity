@@ -91,9 +91,13 @@ class TorrentProxyServer(
   private val priorityLock = Any()
   private val headEnd = (target.firstPiece + HEAD_PIECES_COUNT - 1).coerceAtMost(target.lastPiece)
   private val tailStart = (target.lastPiece - TAIL_PIECES_COUNT + 1).coerceAtLeast(target.firstPiece)
-  private var prioritizedFrom = -1
-  private var prioritizedThrough = -1
-  private var prioritizedReadAheadThrough = -1
+  private val initialWindowEnd =
+    (target.firstPiece + ((min(target.fileSize - 1L, target.bufferWindowBytes - 1L)) / target.pieceLength).toInt()).coerceIn(target.firstPiece, target.lastPiece)
+  private val initialReadAheadEnd =
+    (target.firstPiece + ((min(target.fileSize - 1L, target.readAheadBytes - 1L)) / target.pieceLength).toInt()).coerceIn(target.firstPiece, target.lastPiece)
+  private var prioritizedFrom = target.firstPiece
+  private var prioritizedThrough = initialWindowEnd
+  private var prioritizedReadAheadThrough = initialReadAheadEnd
 
   val serverUrl: String
     get() = URI("http", null, "127.0.0.1", listeningPort, route, null, null).toASCIIString()
