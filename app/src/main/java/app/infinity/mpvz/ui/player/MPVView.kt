@@ -441,9 +441,12 @@ class MPVView(
     )
 
   private fun setupAudioOptions() {
-    // Disable MPV's automatic audio selection
-    // App will handle track selection manually via TrackSelector to respect user choices
-    PlaybackSession.setOptionString("alang", "")
+    val preferredAudioLangs = audioPreferences.preferredLanguages.get().trim()
+    if (preferredAudioLangs.isNotEmpty()) {
+      PlaybackSession.setOptionString("alang", preferredAudioLangs)
+    } else {
+      PlaybackSession.setOptionString("alang", "")
+    }
     PlaybackSession.setOptionString("audio-display", "embedded-first")
     PlaybackSession.setOptionString("audio-delay", (audioPreferences.defaultAudioDelay.get() / 1000.0).toString())
     PlaybackSession.setOptionString("audio-pitch-correction", audioPreferences.audioPitchCorrection.get().toString())
