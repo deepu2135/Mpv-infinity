@@ -67,20 +67,26 @@ class PlayerObserver(
   }
 
   override fun eventProperty(property: String) {
-    if (activity.player.isExiting) return
-    activity.runOnUiThread { activity.onObserverEvent(property) }
+    if (activity.player.isExiting || activity.isFinishing || activity.isDestroyed) return
+    activity.runOnUiThread {
+      if (activity.player.isExiting || activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+      activity.onObserverEvent(property)
+    }
   }
 
   override fun eventProperty(
     property: String,
     value: Long,
   ) {
-    if (activity.player.isExiting) return
+    if (activity.player.isExiting || activity.isFinishing || activity.isDestroyed) return
     if (shouldBypassUiThread(property)) {
       activity.onObserverEvent(property, value)
       requestStretchVideoOrientationUpdate(property)
     } else {
-      activity.runOnUiThread { activity.onObserverEvent(property, value) }
+      activity.runOnUiThread {
+        if (activity.player.isExiting || activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+        activity.onObserverEvent(property, value)
+      }
     }
   }
 
@@ -88,28 +94,37 @@ class PlayerObserver(
     property: String,
     value: Boolean,
   ) {
-    if (activity.player.isExiting) return
-    activity.runOnUiThread { activity.onObserverEvent(property, value) }
+    if (activity.player.isExiting || activity.isFinishing || activity.isDestroyed) return
+    activity.runOnUiThread {
+      if (activity.player.isExiting || activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+      activity.onObserverEvent(property, value)
+    }
   }
 
   override fun eventProperty(
     property: String,
     value: String,
   ) {
-    if (activity.player.isExiting) return
-    activity.runOnUiThread { activity.onObserverEvent(property, value) }
+    if (activity.player.isExiting || activity.isFinishing || activity.isDestroyed) return
+    activity.runOnUiThread {
+      if (activity.player.isExiting || activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+      activity.onObserverEvent(property, value)
+    }
   }
 
   override fun eventProperty(
     property: String,
     value: Double,
   ) {
-    if (activity.player.isExiting) return
+    if (activity.player.isExiting || activity.isFinishing || activity.isDestroyed) return
     if (shouldBypassUiThread(property)) {
       activity.onObserverEvent(property, value)
       requestStretchVideoOrientationUpdate(property)
     } else {
-      activity.runOnUiThread { activity.onObserverEvent(property, value) }
+      activity.runOnUiThread {
+        if (activity.player.isExiting || activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+        activity.onObserverEvent(property, value)
+      }
     }
   }
 
@@ -118,16 +133,20 @@ class PlayerObserver(
     property: String,
     value: MPVNode,
   ) {
-    if (activity.player.isExiting) return
-    activity.runOnUiThread { activity.onObserverEvent(property, value) }
+    if (activity.player.isExiting || activity.isFinishing || activity.isDestroyed) return
+    activity.runOnUiThread {
+      if (activity.player.isExiting || activity.isFinishing || activity.isDestroyed) return@runOnUiThread
+      activity.onObserverEvent(property, value)
+    }
   }
 
   override fun event(
     eventId: Int,
     data: MPVNode,
   ) {
-    if (activity.player.isExiting) return
+    if (activity.player.isExiting || activity.isFinishing || activity.isDestroyed) return
     activity.runOnUiThread {
+      if (activity.player.isExiting || activity.isFinishing || activity.isDestroyed) return@runOnUiThread
       activity.event(eventId)
       if (eventId == MPVLib.MpvEvent.MPV_EVENT_FILE_LOADED) {
         requestStretchVideoOrientationUpdate()

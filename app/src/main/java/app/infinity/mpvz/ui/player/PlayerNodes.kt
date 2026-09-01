@@ -15,10 +15,13 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class ChapterNode(
-  val time: Float,
-  val title: String,
+  val time: Float = 0f,
+  val title: String? = null,
 ) {
-  fun toSegment(): Segment = Segment(title, time)
+  constructor(time: Double, title: String?) : this(time.toFloat(), title)
+
+  fun toSegment(fallbackIndex: Int = 0): Segment =
+    Segment(title?.trim()?.takeIf { it.isNotBlank() } ?: "Chapter ${fallbackIndex + 1}", time)
 }
 
 @Serializable

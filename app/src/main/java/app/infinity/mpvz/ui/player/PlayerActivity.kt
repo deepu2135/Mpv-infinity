@@ -375,6 +375,21 @@ class PlayerActivity :
     return extension in FileTypeUtils.AUDIO_EXTENSIONS
   }
 
+  fun isCurrentMediaAudiobook(): Boolean {
+    if (intent.getBooleanExtra("is_audiobook", false)) return true
+    val currentItem = currentPlaybackItem()
+    val candidates = sequenceOf(fileName, currentPlayableUri, currentItem?.playableUri, currentItem?.title).filterNotNull().toList()
+    for (candidate in candidates) {
+      val lower = candidate.lowercase(java.util.Locale.ROOT)
+      val ext = lower.substringBefore('?').substringAfterLast('.')
+      if (ext in setOf("m4b", "aax", "aa")) return true
+      if (lower.contains("/audiobook") || lower.contains("/audio book") || lower.contains("/audio_book") || lower.contains("/audible/")) return true
+      if (lower.contains("audiobook") || lower.contains("audio book")) return true
+    }
+    if (viewModel.chapters.value.isNotEmpty() && (viewModel.duration ?: 0) > 600) return true
+    return false
+  }
+
   private fun isAudioPlaybackItem(item: PlaybackItem): Boolean {
     // An explicit audio launch is authoritative even for shared containers such as MKV whose
     // resolver MIME may be video/* despite the requested track being audio-only.
@@ -796,8 +811,7 @@ class PlayerActivity :
 
     val installedPreparedPlaybackQueue = installPreparedPlaybackQueue(intent)
     val preparedPlaybackQueue =
-      playlist.isEmpty() &&
-        (installedPreparedPlaybackQueue || restorePreparedPlaybackQueue(intent))
+      installedPreparedPlaybackQueue || (playlist.isEmpty() && restorePreparedPlaybackQueue(intent))
 
     var restoredSavedPlaylistItem = false
     if (playlist.isNotEmpty()) {
@@ -980,9 +994,23 @@ class PlayerActivity :
         .map { chapters -> chapters.map { ChapterNode(time = it.start, title = it.name) } }
         .distinctUntilChanged()
         .collect { chapterNodes ->
-          mediaPlaybackService?.setChapters(
-            chapterNodes,
-          )
+          mediaPlaybackService?.setChapters(chapterNodes)
+          if (chapterNodes.isNotEmpty() && isAudioPlaybackItem(currentPlaybackItem() ?: return@collect)) {
+            val currentPos = viewModel.pos ?: 0
+            if (currentPos <= 2 && !pendingQueueTransitionStartAtZero) {
+              val currentItem = currentPlaybackItem() ?: return@collect
+              val savedPositionMs = withContext(Dispatchers.IO) { persistedPlaybackPositionMs(currentItem) }
+              if (savedPositionMs > 2000L) {
+                val targetSec = (savedPositionMs / 1000L).toInt()
+                Log.d(TAG, "Dynamically discovered chapters for audio; seeking to saved position: ${targetSec}s")
+                if (playbackEngine == PlaybackEngine.MEDIA3) {
+                  media3PlaybackController.seekTo(savedPositionMs, fast = false)
+                } else {
+                  PlaybackSession.setPropertyInt("time-pos", targetSec)
+                }
+              }
+            }
+          }
         }
     }
 
@@ -1739,6 +1767,7 @@ class PlayerActivity :
       if (detachedMedia3Controller === media3PlaybackController) detachedMedia3Controller = null
     }
     if (activeInstance?.get() === this) activeInstance = null
+    runCatching { PlaybackSession.removeObserver(playerObserver) }
     super.onDestroy()
     // The core remains alive throughout Android/ViewModel/window cleanup. Only after super returns
 
@@ -1752,6 +1781,9 @@ class PlayerActivity :
   }
 
   private fun cleanupMPV(keepBackgroundPlaybackAlive: Boolean) {
+    runCatching { PlaybackSession.removeObserver(playerObserver) }
+      .onFailure { e -> Log.e(TAG, "Error removing MPV observer", e) }
+
     if (!mpvInitialized) return
 
     player.isExiting = true
@@ -1767,8 +1799,6 @@ class PlayerActivity :
     pendingQueueNavigationJob = null
     eofAdvanceJob?.cancel()
     resumeAfterUnlockJob?.cancel()
-    runCatching { PlaybackSession.removeObserver(playerObserver) }
-      .onFailure { e -> Log.e(TAG, "Error removing MPV observer", e) }
 
     runCatching { player.releaseSurface() }
       .onFailure { e -> Log.e(TAG, "Error releasing MPV surface", e) }
@@ -2048,14 +2078,20 @@ class PlayerActivity :
       }
     }
 
-    if (startsAtZero || resumePositionMs > 0L || !playerPreferences.savePositionOnQuit.get()) {
-      startMedia3(resumePositionMs)
+    val isAudio = viewModel.isAudioOnly.value || isKnownAudioLaunch(intent) || isCurrentMediaKnownAudio()
+    val isAudiobook = isCurrentMediaAudiobook()
+    val hasChapters = viewModel.chapters.value.isNotEmpty()
+    val shouldResume = if (isAudio) (isAudiobook || hasChapters) else playerPreferences.savePositionOnQuit.get()
+
+    if (startsAtZero || resumePositionMs > 0L || !shouldResume) {
+      startMedia3(if (startsAtZero) 0L else resumePositionMs)
     } else {
       lifecycleScope.launch(Dispatchers.IO) {
         val savedPositionMs = persistedPlaybackPositionMs(item)
+        val allowResume = shouldResume
         withContext(Dispatchers.Main.immediate) {
           if (playbackEngine == PlaybackEngine.MEDIA3 && media3ItemId == item.stableId) {
-            startMedia3(savedPositionMs)
+            startMedia3(if (allowResume) savedPositionMs else 0L)
           }
         }
       }
@@ -3042,6 +3078,18 @@ class PlayerActivity :
           isExplicitQueue = launch.isExplicitQueue,
           isM3u = launch.isM3u,
         )
+        playlistId = null
+        playlistItems = emptyList()
+        playlistEntity = null
+        isM3uPlaylist = launch.isM3u
+        playlist = launch.items.map { item -> Uri.parse(item.originalUri) }
+        playlistIndex = launch.currentIndex
+        playlistWindowOffset = 0
+        playlistTotalCount = playlist.size
+        networkPlaylistPaths = launch.items.map { item -> item.networkSource?.relativePath.orEmpty() }
+        networkPlaylistTitles = launch.items.map { item -> item.title.orEmpty() }
+        networkPlaylistHeaders = launch.items.map(PlaybackItem::headers)
+        networkPlaylistConnectionId = launch.items.getOrNull(launch.currentIndex)?.networkSource?.connectionId ?: -1L
         true
       }
       PreparedPlaybackLaunchResult.Missing,
@@ -4288,8 +4336,8 @@ class PlayerActivity :
    */
   override fun refreshCurrentFolderQueue() {
     val queueState = PlaybackSession.queue.value
-    if (queueState.isTemporaryQueue) {
-      Log.d(TAG, "Skipping folder queue refresh for temporary queue: ${queueState.items.size} items")
+    if (queueState.isTemporaryQueue || queueState.isExplicitQueue || isKnownAudioLaunch(intent) || intent.getBooleanExtra("media_library_audio", false)) {
+      Log.d(TAG, "Skipping folder queue refresh for explicit/audio queue: ${queueState.items.size} items")
       return
     }
     // The Activity playlist can be stale or singleton after an external file-manager launch.
@@ -4324,6 +4372,12 @@ class PlayerActivity :
    * @param index The index of the playlist item to play
    */
   override fun playQueueItem(index: Int) {
+    val queueItems = PlaybackSession.queue.value.items
+    if (playlist.isEmpty() && queueItems.isNotEmpty()) {
+      playlist = queueItems.map { Uri.parse(it.originalUri) }
+      playlistIndex = index.coerceIn(0, queueItems.lastIndex)
+      playlistTotalCount = playlist.size
+    }
     if (index in playlist.indices) {
       // An explicit playlist-row tap is authoritative and should bypass the rapid-skip debounce.
       pendingQueueNavigationJob?.cancel()
@@ -4464,6 +4518,7 @@ class PlayerActivity :
     property: String,
     value: Boolean,
   ) {
+    if (!mpvInitialized || player.isExiting || isFinishing || isDestroyed) return
     when (property) {
       "pause" -> {
         handlePauseStateChange(value)
@@ -4598,6 +4653,7 @@ class PlayerActivity :
     property: String,
     value: String,
   ) {
+    if (!mpvInitialized || player.isExiting || isFinishing || isDestroyed) return
     when (property) {
       "sub-text" -> {
         if (isSecondarySubtitleActive()) {
@@ -4629,6 +4685,7 @@ class PlayerActivity :
     property: String,
     value: MPVNode,
   ) {
+    if (!mpvInitialized || player.isExiting || isFinishing || isDestroyed) return
     // Currently no MPVNode properties are handled
   }
 
@@ -4646,15 +4703,13 @@ class PlayerActivity :
     property: String,
     value: Double,
   ) {
+    if (!mpvInitialized || player.isExiting || isFinishing || isDestroyed) return
     // Handle Double properties
     when (property) {
       "video-params/aspect" -> {
-        // Safety check: don't access MPV during cleanup
-        if (!mpvInitialized || player.isExiting || isFinishing) return
         scheduleVideoParamRefresh(reloadShaders = false)
       }
       "container-fps" -> {
-        if (!mpvInitialized || player.isExiting || isFinishing) return
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R && value > 0.0) {
           try {
             val surface = player.holder?.surface
@@ -4691,7 +4746,7 @@ class PlayerActivity :
     videoParamRefreshJob =
       lifecycleScope.launch {
         delay(100)
-        if (!mpvInitialized || player.isExiting || isFinishing) return@launch
+        if (!mpvInitialized || player.isExiting || isFinishing || isDestroyed) return@launch
 
         val aspect =
           withContext(playbackRenderDispatcher) {
@@ -4728,6 +4783,7 @@ class PlayerActivity :
    * @param property The property name that changed
    */
   internal fun onObserverEvent(property: String) {
+    if (!mpvInitialized || player.isExiting || isFinishing || isDestroyed) return
     // Currently no properties use this signature
   }
 
@@ -4739,6 +4795,7 @@ class PlayerActivity :
    * @param eventId The MPV event ID
    */
   internal fun event(eventId: Int) {
+    if (!mpvInitialized || player.isExiting || isFinishing || isDestroyed) return
     when (eventId) {
       MPVLib.MpvEvent.MPV_EVENT_FILE_LOADED -> {
         val loadGeneration = PlaybackSession.state.value.activeGeneration
@@ -4782,6 +4839,7 @@ class PlayerActivity :
    * applies user preferences, and sets up metadata and media session.
    */
   private fun handleFileLoaded(loadGeneration: Long) {
+    if (!mpvInitialized || player.isExiting || isFinishing || isDestroyed) return
     if (!PlaybackSession.isCurrentGeneration(loadGeneration)) return
     // Extract fileName from intent only if not already set
     // This preserves fileName set in onNewIntent or onCreate
@@ -5254,11 +5312,16 @@ class PlayerActivity :
         val oldState = playbackStateRepository.getVideoDataByTitle(snapshot.mediaIdentifier)
         Log.d(TAG, "Saving playback state for: ${snapshot.mediaTitle} (identifier: ${snapshot.mediaIdentifier})")
 
+        val isAudio = viewModel.isAudioOnly.value || isKnownAudioLaunch(intent) || isCurrentMediaKnownAudio()
+        val isAudiobook = isCurrentMediaAudiobook()
+        val hasChapters = viewModel.chapters.value.isNotEmpty()
+        val savePosition = if (isAudio) (isAudiobook || hasChapters) else playerPreferences.savePositionOnQuit.get()
+
         val playbackState =
           PlaybackStatePersistence.buildEntity(
             oldState = oldState,
             snapshot = snapshot,
-            savePositionOnQuit = playerPreferences.savePositionOnQuit.get(),
+            savePositionOnQuit = savePosition,
             watchedThreshold = browserPreferences.watchedThreshold.get(),
           )
         playbackStateRepository.upsert(playbackState)
@@ -5496,11 +5559,14 @@ class PlayerActivity :
     PlaybackSession.setPropertyDouble("video-zoom", state.videoZoom.toDouble())
     viewModel.setVideoZoom(state.videoZoom)
 
+    val isAudio = viewModel.isAudioOnly.value || isKnownAudioLaunch(intent) || isCurrentMediaKnownAudio()
+    val isAudiobook = isCurrentMediaAudiobook()
+    val hasChapters = viewModel.chapters.value.isNotEmpty()
+    val shouldResume = if (isAudio) (isAudiobook || hasChapters) else playerPreferences.savePositionOnQuit.get()
+
     if (!pendingQueueTransitionStartAtZero &&
-      playerPreferences.savePositionOnQuit.get() &&
-      state.lastPosition != 0 &&
-      !viewModel.isAudioOnly.value &&
-      !isCurrentMediaKnownAudio()
+      shouldResume &&
+      state.lastPosition != 0
     ) {
       if (playbackEngine == PlaybackEngine.MEDIA3 && cachedMedia3State.playbackState != Player.STATE_IDLE) {
         withContext(Dispatchers.Main.immediate) {
@@ -5793,8 +5859,7 @@ class PlayerActivity :
 
     val installedPreparedPlaybackQueue = installPreparedPlaybackQueue(intent)
     val preparedPlaybackQueue =
-      playlistFromIntent.isEmpty() &&
-        (installedPreparedPlaybackQueue || restorePreparedPlaybackQueue(intent))
+      installedPreparedPlaybackQueue || (playlistFromIntent.isEmpty() && restorePreparedPlaybackQueue(intent))
 
     if (preparedPlaybackQueue) {
       viewModel.refreshPlaylistItems()
@@ -7498,6 +7563,12 @@ class PlayerActivity :
    * Load a playlist item by index
    */
   private fun loadPlaylistItem(index: Int) {
+    val queueItems = PlaybackSession.queue.value.items
+    if (playlist.isEmpty() && queueItems.isNotEmpty()) {
+      playlist = queueItems.map { Uri.parse(it.originalUri) }
+      playlistIndex = index.coerceIn(0, queueItems.lastIndex)
+      playlistTotalCount = playlist.size
+    }
     // All items are loaded - just validate index and load directly
     if (index < 0 || index >= playlist.size) {
       Log.e(TAG, "Invalid playlist index: $index (playlist size: ${playlist.size})")
@@ -7513,6 +7584,12 @@ class PlayerActivity :
     index: Int,
     saveCurrentPlaybackState: Boolean = true,
   ) {
+    val queueItems = PlaybackSession.queue.value.items
+    if (playlist.isEmpty() && queueItems.isNotEmpty()) {
+      playlist = queueItems.map { Uri.parse(it.originalUri) }
+      playlistIndex = index.coerceIn(0, queueItems.lastIndex)
+      playlistTotalCount = playlist.size
+    }
     if (index < 0 || index >= playlist.size) {
       Log.e(TAG, "Invalid playlist index: $index (playlist size: ${playlist.size})")
       return
