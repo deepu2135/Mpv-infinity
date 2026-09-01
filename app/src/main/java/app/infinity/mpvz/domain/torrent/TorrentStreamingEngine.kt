@@ -937,4 +937,20 @@ class TorrentStreamingEngine(
     message: String,
     cause: Throwable? = null,
   ) = TorrentStreamException(message, cause)
+
+  fun cleanStaleTorrentCaches() {
+    val baseDir = File(appContext.cacheDir, "torrent_streaming")
+    if (!baseDir.exists() || !baseDir.isDirectory) return
+    val activeDirCanonical = runCatching { active?.cacheDir?.canonicalPath }.getOrNull()
+    val preparedDirCanonical = runCatching { prepared?.cacheDir?.canonicalPath }.getOrNull()
+    baseDir.listFiles()?.forEach { file ->
+      val path = runCatching { file.canonicalPath }.getOrNull()
+      if (path != null && path != activeDirCanonical && path != preparedDirCanonical) {
+        runCatching { file.deleteRecursively() }
+      }
+    }
+    if (baseDir.list().isNullOrEmpty()) {
+      runCatching { baseDir.delete() }
+    }
+  }
 }
