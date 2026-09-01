@@ -162,7 +162,6 @@ import app.infinity.mpvz.ui.player.visualizer.VisualizerPalette
 import app.infinity.mpvz.ui.player.visualizer.rememberAudioVisualizerFeatures
 
 import app.infinity.mpvz.utils.media.fileExtension
-import `is`.xyz.mpv.Utils
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
@@ -812,10 +811,8 @@ fun AudioPlayerControls(
     }
   }
 
-  val isVisualizerActiveEffective = showVisualizer && audioVisualizerStyle != AudioVisualizerStyle.None
-
-  val targetTopColor = if (ambientModeEnabled && (!isVisualizerActiveEffective || showInPlaceLyrics)) (ambientColors?.first ?: Color.Transparent) else Color.Transparent
-  val targetBottomColor = if (ambientModeEnabled && (!isVisualizerActiveEffective || showInPlaceLyrics)) (ambientColors?.second ?: Color.Transparent) else Color.Transparent
+  val targetTopColor = if (ambientModeEnabled && (!showVisualizer || showInPlaceLyrics)) (ambientColors?.first ?: Color.Transparent) else Color.Transparent
+  val targetBottomColor = if (ambientModeEnabled && (!showVisualizer || showInPlaceLyrics)) (ambientColors?.second ?: Color.Transparent) else Color.Transparent
 
   val animatedAmbientTop: Color by animateColorAsState(
     targetValue = targetTopColor,
@@ -837,7 +834,7 @@ fun AudioPlayerControls(
         .fillMaxSize()
         .background(MaterialTheme.colorScheme.surface)
         .drawWithCache {
-          if (ambientModeEnabled && (!isVisualizerActiveEffective || showInPlaceLyrics) && (animatedAmbientTop != Color.Transparent || animatedAmbientBottom != Color.Transparent)) {
+          if (ambientModeEnabled && (!showVisualizer || showInPlaceLyrics) && (animatedAmbientTop != Color.Transparent || animatedAmbientBottom != Color.Transparent)) {
             val topColor = animatedAmbientTop
             val bottomColor = animatedAmbientBottom
             val radialGradient = Brush.radialGradient(
@@ -999,11 +996,7 @@ fun AudioPlayerControls(
             .combinedClickable(
               interactionSource = remember { MutableInteractionSource() },
               indication = null,
-              onClick = {
-                if (audioVisualizerStyle != AudioVisualizerStyle.None) {
-                  viewModel.toggleAudioVisualizer()
-                }
-              },
+              onClick = { viewModel.toggleAudioVisualizer() },
               onLongClick = { onOpenSheet(Sheets.VisualizerStyle) },
             ),
         contentAlignment = Alignment.Center,
@@ -1020,7 +1013,7 @@ fun AudioPlayerControls(
           )
         } else {
           AnimatedContent(
-            targetState = isVisualizerActiveEffective,
+            targetState = showVisualizer,
             transitionSpec = {
               if (targetState) {
                 (fadeIn(animationSpec = tween(350, easing = FastOutSlowInEasing)) +
@@ -1047,7 +1040,6 @@ fun AudioPlayerControls(
               contentAlignment = Alignment.Center,
             ) {
                when (audioVisualizerStyle) {
-                 AudioVisualizerStyle.None -> Unit
                  AudioVisualizerStyle.Galaxy ->
                    GalaxyOverlay(
                      palette = palette,
@@ -1094,8 +1086,8 @@ fun AudioPlayerControls(
             Box(
               modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(isVisualizerActiveEffective, containerWidthPx) {
-                  if (isVisualizerActiveEffective || containerWidthPx <= 0f) return@pointerInput
+                .pointerInput(showVisualizer, containerWidthPx) {
+                  if (showVisualizer || containerWidthPx <= 0f) return@pointerInput
                   detectHorizontalDragGestures(
                     onDragStart = {
                       coroutineScope.launch { animatableOffsetX.snapTo(0f) }
@@ -1212,7 +1204,7 @@ fun AudioPlayerControls(
     }
 
     val landscapeArtworkMetadataView = @Composable {
-      if (!isVisualizerActiveEffective) {
+      if (!showVisualizer) {
         val displayTitle = remember(lastValidTitle, displayArtist) {
           cleanSongTitle(lastValidTitle, displayArtist)
         }
@@ -1455,56 +1447,6 @@ fun AudioPlayerControls(
             )
           }
         }
-
-        val position by PlaybackSession.propInt["time-pos"].collectAsStateWithLifecycle()
-        val precisePosition by viewModel.precisePosition.collectAsStateWithLifecycle()
-        val currentPosSec = if (precisePosition > 0f) precisePosition else position?.toFloat() ?: 0f
-        val currentChapterIndex by PlaybackSession.propInt["chapter"].collectAsStateWithLifecycle()
-        val activeChapter = remember(chapters, currentChapterIndex, currentPosSec) {
-          if (chapters.isEmpty()) null
-          else if (currentChapterIndex != null && currentChapterIndex in chapters.indices) chapters[currentChapterIndex!!]
-          else chapters.lastOrNull { it.start <= currentPosSec } ?: chapters.firstOrNull()
-        }
-
-        if (activeChapter != null && chapters.isNotEmpty()) {
-          Spacer(modifier = Modifier.height(6.dp))
-          Surface(
-            shape = RoundedCornerShape(10.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.75f),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
-            modifier =
-              Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(10.dp))
-                .clickable { onOpenSheet(Sheets.Chapters) },
-          ) {
-            Row(
-              verticalAlignment = Alignment.CenterVertically,
-              horizontalArrangement = Arrangement.spacedBy(6.dp),
-              modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            ) {
-              Icon(
-                imageVector = Icons.RoundedFilled.Bookmarks,
-                contentDescription = stringResource(R.string.btn_label_chapter),
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(16.dp),
-              )
-              Text(
-                text = activeChapter.name,
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f).basicMarquee(iterations = Int.MAX_VALUE),
-              )
-              Text(
-                text = Utils.prettyTime(activeChapter.start.toInt()),
-                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
-                color = MaterialTheme.colorScheme.primary,
-              )
-            }
-          }
-        }
       }
     }
 
@@ -1690,18 +1632,14 @@ fun AudioPlayerControls(
                 )
               }
               ReactiveIconButton(
-                onClick = {
-                  if (audioVisualizerStyle != AudioVisualizerStyle.None) {
-                    viewModel.toggleAudioVisualizer()
-                  }
-                },
+                onClick = { viewModel.toggleAudioVisualizer() },
                 onLongClick = { onOpenSheet(Sheets.VisualizerStyle) },
                 modifier = Modifier.size(if (isPortrait) 40.dp else 48.dp),
               ) {
                 Icon(
-                  imageVector = if (isVisualizerActiveEffective) Icons.RoundedFilled.AutoAwesome else Icons.RoundedFilled.Audiotrack,
+                  imageVector = if (showVisualizer) Icons.RoundedFilled.AutoAwesome else Icons.RoundedFilled.Audiotrack,
                   contentDescription = null,
-                  tint = if (isVisualizerActiveEffective) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                  tint = if (showVisualizer) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                   modifier = Modifier.size(if (isPortrait) 24.dp else 28.dp),
                 )
               }
@@ -1777,18 +1715,14 @@ fun AudioPlayerControls(
                 )
               }
               ReactiveIconButton(
-                onClick = {
-                  if (audioVisualizerStyle != AudioVisualizerStyle.None) {
-                    viewModel.toggleAudioVisualizer()
-                  }
-                },
+                onClick = { viewModel.toggleAudioVisualizer() },
                 onLongClick = { onOpenSheet(Sheets.VisualizerStyle) },
                 modifier = Modifier.size(if (isPortrait) 40.dp else 48.dp),
               ) {
                 Icon(
-                  imageVector = if (isVisualizerActiveEffective) Icons.RoundedFilled.AutoAwesome else Icons.RoundedFilled.Audiotrack,
+                  imageVector = if (showVisualizer) Icons.RoundedFilled.AutoAwesome else Icons.RoundedFilled.Audiotrack,
                   contentDescription = null,
-                  tint = if (isVisualizerActiveEffective) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                  tint = if (showVisualizer) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                   modifier = Modifier.size(if (isPortrait) 24.dp else 28.dp),
                 )
               }

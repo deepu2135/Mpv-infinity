@@ -883,13 +883,16 @@ object PlaybackSession : MPVLib.EventObserver {
               }
               propBoolean.emit("pause", desiredPaused)
               restoreSuspendedVideoTrackLocked()
-              clearPlaybackTransitionAudioGuardLocked(restoreMute = true)
+              // FILE_LOADED is a reliable fallback for handoffs where mpv reaches a loaded state
+              // before emitting PLAYBACK_RESTART. Without this fallback a transition guard can keep
+              // the reactivated MPV audio muted indefinitely after Media3 ownership ends.
+              schedulePlaybackTransitionAudioGuardRestoreLocked(PLAYBACK_TRANSITION_AUDIO_RESTORE_DELAY_MS)
               true
             }
           }
           MPVLib.MpvEvent.MPV_EVENT_PLAYBACK_RESTART -> {
-            clearSeekAudioGuardLocked(restoreMute = true)
-            clearPlaybackTransitionAudioGuardLocked(restoreMute = true)
+            scheduleSeekAudioGuardRestoreLocked(SEEK_AUDIO_RESTORE_DELAY_MS)
+            schedulePlaybackTransitionAudioGuardRestoreLocked(PLAYBACK_TRANSITION_AUDIO_RESTORE_DELAY_MS)
             true
           }
           MPVLib.MpvEvent.MPV_EVENT_END_FILE -> {

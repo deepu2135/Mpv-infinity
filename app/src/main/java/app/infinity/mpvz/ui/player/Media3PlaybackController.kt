@@ -1208,43 +1208,22 @@ class Media3PlaybackController(
     publishState()
   }
 
-  private fun extractChaptersFromMetadata(metadata: Metadata): List<dev.vivvvek.seeker.Segment> =
-    (0 until metadata.length()).mapNotNull { metadataIndex ->
-      when (val entry = metadata[metadataIndex]) {
-        is Chapter -> {
-          if (entry.isHidden()) return@mapNotNull null
-          val startTimeMs = entry.getStartTimeMs()
-          if (startTimeMs == C.TIME_UNSET || startTimeMs < 0L) return@mapNotNull null
-          val title = entry.getTitle()?.value?.trim().orEmpty()
-          dev.vivvvek.seeker.Segment(
-            title.ifBlank { "Chapter ${metadataIndex + 1}" },
-            startTimeMs / 1000f,
-          )
-        }
-        is androidx.media3.extractor.metadata.id3.ChapterFrame -> {
-          val startTimeMs = entry.startTimeMs.toLong()
-          if (startTimeMs < 0L) return@mapNotNull null
-          val subTitle = (0 until entry.subFrameCount)
-            .mapNotNull { subIdx ->
-              (entry.getSubFrame(subIdx) as? androidx.media3.extractor.metadata.id3.TextInformationFrame)?.values?.firstOrNull()?.trim()
-            }
-            .firstOrNull { it.isNotBlank() }
-            ?: entry.chapterId?.trim().orEmpty()
-          dev.vivvvek.seeker.Segment(
-            subTitle.ifBlank { "Chapter ${metadataIndex + 1}" },
-            startTimeMs / 1000f,
-          )
-        }
-        else -> null
-      }
-    }
-
   private fun chaptersFromTrackMetadata(tracks: Tracks): List<dev.vivvvek.seeker.Segment> =
     tracks.groups
       .flatMap { group ->
         (0 until group.length).flatMap { trackIndex ->
           val metadata = group.getTrackFormat(trackIndex).metadata ?: return@flatMap emptyList()
-          extractChaptersFromMetadata(metadata)
+          (0 until metadata.length()).mapNotNull { metadataIndex ->
+            val chapter = metadata[metadataIndex] as? Chapter ?: return@mapNotNull null
+            if (chapter.isHidden()) return@mapNotNull null
+            val startTimeMs = chapter.getStartTimeMs()
+            if (startTimeMs == C.TIME_UNSET || startTimeMs < 0L) return@mapNotNull null
+            val title = chapter.getTitle()?.value?.trim().orEmpty()
+            dev.vivvvek.seeker.Segment(
+              title.ifBlank { "Chapter ${metadataIndex + 1}" },
+              startTimeMs / 1000f,
+            )
+          }
         }
       }
       .distinctBy { it.start }
@@ -1330,7 +1309,18 @@ class Media3PlaybackController(
   }
 
   override fun onMetadata(metadata: Metadata) {
-    val chapters = extractChaptersFromMetadata(metadata).distinctBy { it.start }
+    val chapters =
+      (0 until metadata.length()).mapNotNull { index ->
+        val chapter = metadata[index] as? Chapter ?: return@mapNotNull null
+        if (chapter.isHidden()) return@mapNotNull null
+        val startTimeMs = chapter.getStartTimeMs()
+        if (startTimeMs == C.TIME_UNSET || startTimeMs < 0L) return@mapNotNull null
+        val title = chapter.getTitle()?.value?.trim().orEmpty()
+        dev.vivvvek.seeker.Segment(
+          title.ifBlank { "Chapter ${index + 1}" },
+          startTimeMs / 1000f,
+        )
+      }.distinctBy { it.start }
 
     // Preserve chapters already extracted from track Format.metadata. Media3 can emit an empty
     // global metadata callback after the track callback for Matroska files.

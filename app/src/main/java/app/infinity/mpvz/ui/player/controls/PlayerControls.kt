@@ -142,16 +142,12 @@ import app.infinity.mpvz.ui.player.buildControlsExitV
 import app.infinity.mpvz.ui.player.controls.components.AnimatedPlayPauseIcon
 import app.infinity.mpvz.ui.player.controls.components.PlayerGlassSurface
 import app.infinity.mpvz.ui.player.controls.components.BrightnessSlider
-import app.infinity.mpvz.domain.torrent.TorrentStreamingEngine
-import app.infinity.mpvz.domain.torrent.TorrentStreamingState
-import app.infinity.mpvz.preferences.SubtitlesPreferences
 import app.infinity.mpvz.ui.player.controls.components.MultipleSpeedPlayerUpdate
 import app.infinity.mpvz.ui.player.controls.components.SeekPlayerUpdate
 import app.infinity.mpvz.ui.player.controls.components.SeekThumbnailPreviewBubble
 import app.infinity.mpvz.ui.player.controls.components.SeekbarWithTimers
 import app.infinity.mpvz.ui.player.controls.components.SlideToUnlock
 import app.infinity.mpvz.ui.player.controls.components.TextPlayerUpdate
-import app.infinity.mpvz.ui.player.controls.components.TranslatedSubtitleText
 import app.infinity.mpvz.ui.player.controls.components.VolumeSlider
 import app.infinity.mpvz.ui.player.controls.components.sheets.toFixed
 import app.infinity.mpvz.ui.player.getTrackSelectionId
@@ -219,22 +215,6 @@ fun PlayerControls(
   val portraitPlaybackControlsPosition by
     appearancePreferences.portraitPlaybackControlsPosition.collectAsState()
   val playerPreferences = koinInject<PlayerPreferences>()
-  val torrentStreamingEngine = koinInject<TorrentStreamingEngine>()
-  val torrentStreamingState by torrentStreamingEngine.state.collectAsState(initial = TorrentStreamingState.Idle)
-  val subtitlesPreferences = koinInject<SubtitlesPreferences>()
-  val subtitleFontSize by subtitlesPreferences.fontSize.collectAsState()
-  val subtitleScale by subtitlesPreferences.subScale.collectAsState()
-  val liveSubtitleScale by PlaybackSession.propFloat["sub-scale"].collectAsState()
-  val liveSubtitleFontSize by PlaybackSession.propInt["sub-font-size"].collectAsState()
-  val subtitleTextColor by subtitlesPreferences.textColor.collectAsState()
-  val subtitleBackgroundColor by subtitlesPreferences.backgroundColor.collectAsState()
-  val subtitleBorderColor by subtitlesPreferences.borderColor.collectAsState()
-  val subtitleBorderSize by subtitlesPreferences.borderSize.collectAsState()
-  val subtitleShadowOffset by subtitlesPreferences.shadowOffset.collectAsState()
-  val subtitleBold by subtitlesPreferences.bold.collectAsState()
-  val subtitleItalic by subtitlesPreferences.italic.collectAsState()
-  val subtitleJustification by subtitlesPreferences.justification.collectAsState()
-  val subtitlePosition by PlaybackSession.propInt["sub-pos"].collectAsState()
   val audioPreferences = koinInject<AudioPreferences>()
   val showSystemStatusBar by playerPreferences.showSystemStatusBar.collectAsState()
   val showSystemNavigationBar by playerPreferences.showSystemNavigationBar.collectAsState()
@@ -250,7 +230,6 @@ fun PlayerControls(
   val mpvDuration by PlaybackSession.propInt["duration"].collectAsState()
   val preciseDuration by viewModel.preciseDuration.collectAsState()
   val paused = if (isMedia3Active) !media3State.isPlaying else mpvPaused
-  val torrentBuffering = torrentStreamingState is TorrentStreamingState.Connecting
   val duration =
     if (isMedia3Active) {
       // Do not reuse the inactive MPV timeline while Media3 is preparing. That stale duration can
@@ -309,36 +288,19 @@ fun PlayerControls(
     }
   var isSeeking by remember { mutableStateOf(false) }
   val mpvSeeking by PlaybackSession.propBoolean["seeking"].collectAsState()
+  val isPlayerSeeking = isSeeking || (mpvSeeking ?: false)
   var stableDemuxerCacheTime by remember { mutableFloatStateOf(0f) }
-  val precisePosition by viewModel.precisePosition.collectAsState()
-  val currentBufferedPosition =
-    if (isMedia3Active) {
-      (media3State.bufferedPositionMs / 1000f)
-        .takeIf { it > 0f && !it.isNaN() && !it.isInfinite() && seekbarDuration > 0f }
-        ?.coerceIn(0f, seekbarDuration)
-    } else {
-      val basePos = precisePosition.takeIf { it > 0f } ?: (PlaybackSession.propInt["time-pos"].value?.toFloat() ?: 0f)
-      val fromDuration =
-        demuxerCacheDuration
-          ?.toFloat()
-          ?.takeIf { it > 0f && !it.isNaN() && !it.isInfinite() }
-          ?.let { basePos + it }
-      val fromTime =
-        demuxerCacheTime
-          ?.toFloat()
-          ?.takeIf { it > basePos && !it.isNaN() && !it.isInfinite() }
-      (fromDuration ?: fromTime)
-        ?.takeIf { it > 0f && !it.isNaN() && !it.isInfinite() && seekbarDuration > 0f }
-        ?.let { raw ->
-          val safeBase = basePos.takeIf { it.isFinite() }?.coerceIn(0f, seekbarDuration) ?: 0f
-          raw.coerceIn(0f, seekbarDuration).coerceAtLeast(safeBase)
-        }
-    }
+  val currentDemuxerCacheTime =
+    demuxerCacheTime
+      ?.toFloat()
+      ?.takeIf { it > 0f && !it.isNaN() && !it.isInfinite() && seekbarDuration > 0f }
+      ?.coerceIn(0f, seekbarDuration)
 
-  LaunchedEffect(showBufferedRange, seekbarDuration, currentBufferedPosition) {
+  LaunchedEffect(showBufferedRange, seekbarDuration, currentDemuxerCacheTime, isPlayerSeeking) {
     when {
       !showBufferedRange || seekbarDuration <= 0f -> stableDemuxerCacheTime = 0f
-      currentBufferedPosition != null -> stableDemuxerCacheTime = currentBufferedPosition
+      currentDemuxerCacheTime != null -> stableDemuxerCacheTime = currentDemuxerCacheTime
+      !isPlayerSeeking -> stableDemuxerCacheTime = 0f
     }
   }
   var resetControlsTimestamp by remember { mutableStateOf(0L) }
@@ -504,14 +466,9 @@ fun PlayerControls(
         onMedia3AudioPitchCorrection = onMedia3AudioPitchCorrection,
         chapter = chapters.getOrNull(currentChapter ?: 0),
         chapters = chapters.toImmutableList(),
-        onSeekToChapter = { index ->
-          if (isMedia3Active) {
-            chapters.getOrNull(index)?.start?.let { viewModel.seekTo(it.toDouble()) }
-            viewModel.unpause()
-          } else {
-            PlaybackSession.setPropertyInt("chapter", index)
-            viewModel.unpause()
-          }
+        onSeekToChapter = {
+          PlaybackSession.setPropertyInt("chapter", it)
+          viewModel.unpause()
         },
         decoder = decoder,
         isMedia3Active = isMedia3Active,
@@ -699,7 +656,7 @@ fun PlayerControls(
           val skipSegmentChip = createRef()
           val seekbar = createRef()
           val thumbnailPreview = createRef()
-          val (playerUpdates, translatedSubtitle) = createRefs()
+          val (playerUpdates) = createRefs()
           val (customLeftButtonsRef, customRightButtonsRef) = createRefs()
           val customButtonsPortraitRef = createRef()
 
@@ -852,7 +809,6 @@ fun PlayerControls(
 
           val holdForMultipleSpeed by playerPreferences.holdForMultipleSpeed.collectAsState()
           val currentPlayerUpdate by viewModel.playerUpdate.collectAsState()
-          val embeddedTranslatedSubtitle by viewModel.embeddedTranslatedSubtitle.collectAsState()
           val isTranslatingSub by viewModel.isTranslatingSub.collectAsState()
           val translationProgress by viewModel.translationProgress.collectAsState()
           val translationStatus by viewModel.translationStatus.collectAsState()
@@ -884,7 +840,6 @@ fun PlayerControls(
               is PlayerUpdates.RepeatMode -> showActionFeedbackOverlay
               is PlayerUpdates.Shuffle -> showRepeatShuffleOverlay
               is PlayerUpdates.ShowText -> showActionFeedbackOverlay
-              is PlayerUpdates.TranslatedSubtitle -> false
               is PlayerUpdates.ProviderStatusText -> showProviderStatusOverlay
               is PlayerUpdates.HorizontalSeek -> showActionFeedbackOverlay
               is PlayerUpdates.FrameInfo -> true // Groups 3/4 — not in scope
@@ -1053,41 +1008,6 @@ fun PlayerControls(
               }
 
               else -> {}
-            }
-          }
-
-          AnimatedVisibility(
-            visible = embeddedTranslatedSubtitle != null,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier.constrainAs(translatedSubtitle) {
-              linkTo(parent.start, parent.end)
-              val position = (subtitlePosition ?: subtitlesPreferences.subPos.get()).coerceIn(0, 150)
-              // Keep the translated cue on the same anchor as MPV's primary subtitle. The
-              // position is the shared MPV 0–150 coordinate, not a separate overlay setting.
-              val configuredOffset = (((150 - position) * (if (isPortrait) 1.55f else 2.1f)).coerceIn(-250f, 250f)).dp
-              bottom.linkTo(parent.bottom, configuredOffset)
-            },
-          ) {
-            val translated = embeddedTranslatedSubtitle
-            if (!translated.isNullOrBlank()) {
-              TranslatedSubtitleText(
-                text = translated,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
-                fontSize = ((liveSubtitleFontSize ?: subtitleFontSize) * (liveSubtitleScale ?: subtitleScale)).coerceIn(8f, 120f).sp,
-                textColor = Color(subtitleTextColor),
-                backgroundColor = Color(subtitleBackgroundColor),
-                outlineColor = Color(subtitleBorderColor),
-                outlineWidth = subtitleBorderSize.toFloat(),
-                shadowOffset = subtitleShadowOffset.toFloat(),
-                bold = subtitleBold,
-                italic = subtitleItalic,
-                textAlign = when (subtitleJustification.name.lowercase()) {
-                  "left" -> androidx.compose.ui.text.style.TextAlign.Start
-                  "right" -> androidx.compose.ui.text.style.TextAlign.End
-                  else -> androidx.compose.ui.text.style.TextAlign.Center
-                },
-              )
             }
           }
 
@@ -1570,18 +1490,14 @@ fun PlayerControls(
                           null
                         },
                     ) {
-                      if (torrentBuffering) {
-                        LoadingIndicator(modifier = Modifier.size(24.dp))
-                      } else {
-                        AnimatedPlayPauseIcon(
-                          isPlaying = paused == false,
-                          modifier =
-                            Modifier
-                              .fillMaxSize()
-                              .padding(MaterialTheme.spacing.medium),
-                          tint = LocalContentColor.current,
-                        )
-                      }
+                      AnimatedPlayPauseIcon(
+                        isPlaying = paused == false,
+                        modifier =
+                          Modifier
+                            .fillMaxSize()
+                            .padding(MaterialTheme.spacing.medium),
+                        tint = LocalContentColor.current,
+                      )
                     }
 
                     Surface(
@@ -1680,18 +1596,14 @@ fun PlayerControls(
                         null
                       },
                   ) {
-                    if (torrentBuffering) {
-                      LoadingIndicator(modifier = Modifier.size(24.dp))
-                    } else {
-                      AnimatedPlayPauseIcon(
-                        isPlaying = paused == false,
-                        modifier =
-                          Modifier
-                            .fillMaxSize()
-                            .padding(MaterialTheme.spacing.medium),
-                        tint = LocalContentColor.current,
-                      )
-                    }
+                    AnimatedPlayPauseIcon(
+                      isPlaying = paused == false,
+                      modifier =
+                        Modifier
+                          .fillMaxSize()
+                          .padding(MaterialTheme.spacing.medium),
+                      tint = LocalContentColor.current,
+                    )
                   }
                 }
               }

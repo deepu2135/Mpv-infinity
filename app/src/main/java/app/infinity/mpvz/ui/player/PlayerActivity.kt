@@ -87,7 +87,6 @@ import app.infinity.mpvz.domain.playbackstate.repository.PlaybackStateRepository
 import app.infinity.mpvz.domain.torrent.TorrentStreamRequest
 import app.infinity.mpvz.domain.torrent.TorrentStreamException
 import app.infinity.mpvz.domain.torrent.TorrentStreamingEngine
-import app.infinity.mpvz.domain.torrent.TorrentStreamingState
 import app.infinity.mpvz.domain.torrent.canonicalInfoHash
 import app.infinity.mpvz.domain.torrent.isTorrentSource
 import app.infinity.mpvz.network.AndroidCookieJar
@@ -374,20 +373,6 @@ class PlayerActivity :
         .map { it.fileExtension() }
         .firstOrNull { it in FileTypeUtils.AUDIO_EXTENSIONS || it in FileTypeUtils.VIDEO_EXTENSIONS }
     return extension in FileTypeUtils.AUDIO_EXTENSIONS
-  }
-
-  fun isCurrentMediaAudiobook(): Boolean {
-    if (intent.getBooleanExtra("is_audiobook", false)) return true
-    if (viewModel.chapters.value.isNotEmpty()) return true
-    val candidates = sequenceOf(fileName, currentPlayableUri, currentPlaybackItem()?.playableUri, currentPlaybackItem()?.title).filterNotNull().toList()
-    for (candidate in candidates) {
-      val lower = candidate.lowercase()
-      val ext = lower.substringBefore('?').substringAfterLast('.')
-      if (ext in setOf("m4b", "aax", "aa")) return true
-      if (lower.contains("/audiobook") || lower.contains("/audio book") || lower.contains("/audio_book") || lower.contains("/audible/")) return true
-      if (lower.contains("audiobook") || lower.contains("audio book")) return true
-    }
-    return false
   }
 
   private fun isAudioPlaybackItem(item: PlaybackItem): Boolean {
@@ -811,7 +796,8 @@ class PlayerActivity :
 
     val installedPreparedPlaybackQueue = installPreparedPlaybackQueue(intent)
     val preparedPlaybackQueue =
-      installedPreparedPlaybackQueue || (playlist.isEmpty() && restorePreparedPlaybackQueue(intent))
+      playlist.isEmpty() &&
+        (installedPreparedPlaybackQueue || restorePreparedPlaybackQueue(intent))
 
     var restoredSavedPlaylistItem = false
     if (playlist.isNotEmpty()) {
@@ -991,25 +977,12 @@ class PlayerActivity :
 
     lifecycleScope.launch {
       viewModel.chapters
-        .map { chapters -> chapters.map { ChapterNode(time = it.start.toDouble(), title = it.name) } }
+        .map { chapters -> chapters.map { ChapterNode(time = it.start, title = it.name) } }
         .distinctUntilChanged()
         .collect { chapterNodes ->
           mediaPlaybackService?.setChapters(
             chapterNodes,
           )
-          if (chapterNodes.isNotEmpty() && (isCurrentMediaKnownAudio() || viewModel.isAudioOnly.value)) {
-            val item = activePlaybackItem ?: media3ActiveItem
-            if (item != null && (viewModel.pos ?: 0) <= 2 && !pendingQueueTransitionStartAtZero) {
-              val savedPositionMs = withContext(Dispatchers.IO) { persistedPlaybackPositionMs(item) }
-              if (savedPositionMs > 2000L && (viewModel.pos ?: 0) <= 2) {
-                if (playbackEngine == PlaybackEngine.MEDIA3) {
-                  media3PlaybackController.seekTo(savedPositionMs, fast = false)
-                } else {
-                  PlaybackSession.setPropertyInt("time-pos", (savedPositionMs / 1000L).toInt())
-                }
-              }
-            }
-          }
         }
     }
 
@@ -1193,11 +1166,6 @@ class PlayerActivity :
     if (viewModel.panelShown.value != Panels.None) {
       viewModel.panelShown.update { Panels.None }
       viewModel.showControls()
-      return
-    }
-
-    if (isCurrentMediaTorrent()) {
-      requestExplicitHardStop()
       return
     }
 
@@ -1758,9 +1726,7 @@ class PlayerActivity :
       }
       cleanupReceivers()
       releaseMediaSession()
-      if (!torrentPickerHandoff && (!keepBackgroundPlaybackAlive || isCurrentMediaTorrent())) {
-        torrentStreamingEngine.stopStream()
-      }
+      if (!keepBackgroundPlaybackAlive && !torrentPickerHandoff) torrentStreamingEngine.stopStream()
     }.onFailure { e ->
       Log.e(TAG, "Error during onDestroy", e)
     }
@@ -2082,20 +2048,14 @@ class PlayerActivity :
       }
     }
 
-    val isAudio = viewModel.isAudioOnly.value || isKnownAudioLaunch(intent) || isCurrentMediaKnownAudio()
-    val isAudiobook = isCurrentMediaAudiobook()
-    val hasChapters = viewModel.chapters.value.isNotEmpty()
-    val shouldResume = if (isAudio) (isAudiobook || hasChapters) else playerPreferences.savePositionOnQuit.get()
-
-    if (startsAtZero || resumePositionMs > 0L) {
+    if (startsAtZero || resumePositionMs > 0L || !playerPreferences.savePositionOnQuit.get()) {
       startMedia3(resumePositionMs)
     } else {
       lifecycleScope.launch(Dispatchers.IO) {
         val savedPositionMs = persistedPlaybackPositionMs(item)
-        val allowResume = shouldResume
         withContext(Dispatchers.Main.immediate) {
           if (playbackEngine == PlaybackEngine.MEDIA3 && media3ItemId == item.stableId) {
-            startMedia3(if (allowResume) savedPositionMs else 0L)
+            startMedia3(savedPositionMs)
           }
         }
       }
@@ -2478,7 +2438,6 @@ class PlayerActivity :
     isInBackgroundPlayback = false
     pendingBackgroundTransition = false
     pendingBackNavigationBackgroundTransition = false
-    torrentStreamingEngine.stopStream()
     runCatching {
       media3PlaybackController.detachUiCallbacks()
       media3PlaybackController.stop()
@@ -2507,10 +2466,6 @@ class PlayerActivity :
       // Don't restore UI during normal finish to prevent flickering
       // System will handle UI restoration automatically
       isReady = false
-
-      if (isCurrentMediaTorrent()) {
-        torrentStreamingEngine.stopStream()
-      }
 
       // Clean up service when finishing
       if (!isBackgroundPlaybackSessionActive) {
@@ -3087,18 +3042,6 @@ class PlayerActivity :
           isExplicitQueue = launch.isExplicitQueue,
           isM3u = launch.isM3u,
         )
-        playlistId = null
-        playlistItems = emptyList()
-        playlistEntity = null
-        isM3uPlaylist = launch.isM3u
-        playlist = launch.items.map { item -> Uri.parse(item.originalUri) }
-        playlistIndex = launch.currentIndex
-        playlistWindowOffset = 0
-        playlistTotalCount = playlist.size
-        networkPlaylistPaths = launch.items.map { item -> item.networkSource?.relativePath.orEmpty() }
-        networkPlaylistTitles = launch.items.map { item -> item.title.orEmpty() }
-        networkPlaylistHeaders = launch.items.map(PlaybackItem::headers)
-        networkPlaylistConnectionId = launch.items.getOrNull(launch.currentIndex)?.networkSource?.connectionId ?: -1L
         true
       }
       PreparedPlaybackLaunchResult.Missing,
@@ -4345,8 +4288,8 @@ class PlayerActivity :
    */
   override fun refreshCurrentFolderQueue() {
     val queueState = PlaybackSession.queue.value
-    if (queueState.isTemporaryQueue || queueState.isExplicitQueue || isKnownAudioLaunch(intent) || intent.getBooleanExtra("media_library_audio", false)) {
-      Log.d(TAG, "Skipping folder queue refresh for explicit/audio queue: ${queueState.items.size} items")
+    if (queueState.isTemporaryQueue) {
+      Log.d(TAG, "Skipping folder queue refresh for temporary queue: ${queueState.items.size} items")
       return
     }
     // The Activity playlist can be stale or singleton after an external file-manager launch.
@@ -4381,12 +4324,6 @@ class PlayerActivity :
    * @param index The index of the playlist item to play
    */
   override fun playQueueItem(index: Int) {
-    val queueItems = PlaybackSession.queue.value.items
-    if (playlist.isEmpty() && queueItems.isNotEmpty()) {
-      playlist = queueItems.map { Uri.parse(it.originalUri) }
-      playlistIndex = index.coerceIn(0, queueItems.lastIndex)
-      playlistTotalCount = playlist.size
-    }
     if (index in playlist.indices) {
       // An explicit playlist-row tap is authoritative and should bypass the rapid-skip debounce.
       pendingQueueNavigationJob?.cancel()
@@ -4668,11 +4605,6 @@ class PlayerActivity :
           val width = player.width.takeIf { it > 0 }?.toFloat()
           val height = player.height.takeIf { it > 0 }?.toFloat()
           applySubtitlePositions(primaryPosition, width, height)
-        }
-        if (value.isBlank()) {
-          viewModel.handleEmbeddedSubtitleCueBlank()
-        } else {
-          viewModel.translateEmbeddedSubtitleCue(value)
         }
       }
       else -> {
@@ -5322,16 +5254,11 @@ class PlayerActivity :
         val oldState = playbackStateRepository.getVideoDataByTitle(snapshot.mediaIdentifier)
         Log.d(TAG, "Saving playback state for: ${snapshot.mediaTitle} (identifier: ${snapshot.mediaIdentifier})")
 
-        val isAudio = viewModel.isAudioOnly.value || isKnownAudioLaunch(intent) || isCurrentMediaKnownAudio()
-        val isAudiobook = isCurrentMediaAudiobook()
-        val hasChapters = viewModel.chapters.value.isNotEmpty()
-        val savePosition = if (isAudio) (isAudiobook || hasChapters) else playerPreferences.savePositionOnQuit.get()
-
         val playbackState =
           PlaybackStatePersistence.buildEntity(
             oldState = oldState,
             snapshot = snapshot,
-            savePositionOnQuit = savePosition,
+            savePositionOnQuit = playerPreferences.savePositionOnQuit.get(),
             watchedThreshold = browserPreferences.watchedThreshold.get(),
           )
         playbackStateRepository.upsert(playbackState)
@@ -5569,14 +5496,11 @@ class PlayerActivity :
     PlaybackSession.setPropertyDouble("video-zoom", state.videoZoom.toDouble())
     viewModel.setVideoZoom(state.videoZoom)
 
-    val isAudio = viewModel.isAudioOnly.value || isKnownAudioLaunch(intent) || isCurrentMediaKnownAudio()
-    val isAudiobook = isCurrentMediaAudiobook()
-    val hasChapters = viewModel.chapters.value.isNotEmpty()
-    val shouldResume = if (isAudio) (isAudiobook || hasChapters) else playerPreferences.savePositionOnQuit.get()
-
     if (!pendingQueueTransitionStartAtZero &&
-      shouldResume &&
-      state.lastPosition != 0
+      playerPreferences.savePositionOnQuit.get() &&
+      state.lastPosition != 0 &&
+      !viewModel.isAudioOnly.value &&
+      !isCurrentMediaKnownAudio()
     ) {
       if (playbackEngine == PlaybackEngine.MEDIA3 && cachedMedia3State.playbackState != Player.STATE_IDLE) {
         withContext(Dispatchers.Main.immediate) {
@@ -5869,7 +5793,8 @@ class PlayerActivity :
 
     val installedPreparedPlaybackQueue = installPreparedPlaybackQueue(intent)
     val preparedPlaybackQueue =
-      installedPreparedPlaybackQueue || (playlistFromIntent.isEmpty() && restorePreparedPlaybackQueue(intent))
+      playlistFromIntent.isEmpty() &&
+        (installedPreparedPlaybackQueue || restorePreparedPlaybackQueue(intent))
 
     if (preparedPlaybackQueue) {
       viewModel.refreshPlaylistItems()
@@ -6252,13 +6177,6 @@ class PlayerActivity :
           }
         }
       }
-  }
-
-  private fun isCurrentMediaTorrent(): Boolean {
-    val currentUri = currentPlayableUri ?: intent.data?.toString() ?: fileName
-    return isTorrentSource(currentUri, intent.type) ||
-      torrentStreamingEngine.state.value is TorrentStreamingState.Streaming ||
-      torrentStreamingEngine.state.value is TorrentStreamingState.Connecting
   }
 
   private fun redirectUnselectedTorrentToPicker(
@@ -7580,12 +7498,6 @@ class PlayerActivity :
    * Load a playlist item by index
    */
   private fun loadPlaylistItem(index: Int) {
-    val queueItems = PlaybackSession.queue.value.items
-    if (playlist.isEmpty() && queueItems.isNotEmpty()) {
-      playlist = queueItems.map { Uri.parse(it.originalUri) }
-      playlistIndex = index.coerceIn(0, queueItems.lastIndex)
-      playlistTotalCount = playlist.size
-    }
     // All items are loaded - just validate index and load directly
     if (index < 0 || index >= playlist.size) {
       Log.e(TAG, "Invalid playlist index: $index (playlist size: ${playlist.size})")
@@ -7601,12 +7513,6 @@ class PlayerActivity :
     index: Int,
     saveCurrentPlaybackState: Boolean = true,
   ) {
-    val queueItems = PlaybackSession.queue.value.items
-    if (playlist.isEmpty() && queueItems.isNotEmpty()) {
-      playlist = queueItems.map { Uri.parse(it.originalUri) }
-      playlistIndex = index.coerceIn(0, queueItems.lastIndex)
-      playlistTotalCount = playlist.size
-    }
     if (index < 0 || index >= playlist.size) {
       Log.e(TAG, "Invalid playlist index: $index (playlist size: ${playlist.size})")
       return
@@ -7790,7 +7696,7 @@ class PlayerActivity :
           intent.getBooleanExtra("is_audio", false) ||
           currentPlaybackItem()?.mimeType?.startsWith("audio/", ignoreCase = true) == true,
     )
-    service.setChapters(viewModel.chapters.value.map { ChapterNode(time = it.start.toDouble(), title = it.name) })
+    service.setChapters(viewModel.chapters.value.map { ChapterNode(time = it.start, title = it.name) })
 
     if (!updateThumbnail || thumbnailKey.isBlank()) return
     if (thumbnailKey == lastBackgroundThumbnailKey && (cachedThumbnail != null || lastBackgroundThumbnailResolved)) return

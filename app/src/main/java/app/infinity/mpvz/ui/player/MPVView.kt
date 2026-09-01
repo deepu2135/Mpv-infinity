@@ -434,19 +434,12 @@ class MPVView(
       "user-data/mpv/console/open" to MPVLib.MpvFormat.MPV_FORMAT_FLAG,
       "sub-text" to MPVLib.MpvFormat.MPV_FORMAT_STRING,
       "sub-scale" to MPVLib.MpvFormat.MPV_FORMAT_DOUBLE,
-      "sub-font-size" to MPVLib.MpvFormat.MPV_FORMAT_INT64,
-      "sub-pos" to MPVLib.MpvFormat.MPV_FORMAT_INT64,
-      "secondary-sub-pos" to MPVLib.MpvFormat.MPV_FORMAT_INT64,
-      "sub-visibility" to MPVLib.MpvFormat.MPV_FORMAT_FLAG,
     )
 
   private fun setupAudioOptions() {
-    val preferredAudioLangs = audioPreferences.preferredLanguages.get().trim()
-    if (preferredAudioLangs.isNotEmpty()) {
-      PlaybackSession.setOptionString("alang", preferredAudioLangs)
-    } else {
-      PlaybackSession.setOptionString("alang", "")
-    }
+    // Disable MPV's automatic audio selection
+    // App will handle track selection manually via TrackSelector to respect user choices
+    PlaybackSession.setOptionString("alang", "")
     PlaybackSession.setOptionString("audio-display", "embedded-first")
     PlaybackSession.setOptionString("audio-delay", (audioPreferences.defaultAudioDelay.get() / 1000.0).toString())
     PlaybackSession.setOptionString("audio-pitch-correction", audioPreferences.audioPitchCorrection.get().toString())

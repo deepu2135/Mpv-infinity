@@ -79,7 +79,7 @@ internal object PlaybackStatePersistence {
     savePositionOnQuit: Boolean,
   ): Int {
     if (!savePositionOnQuit) {
-      return 0
+      return oldState?.lastPosition ?: 0
     }
 
     // During Media3 prepare and engine handoff, duration can temporarily be unknown (0). Treat

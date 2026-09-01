@@ -119,8 +119,8 @@ import kotlin.reflect.KProperty
 class PlayerViewModel : ViewModel(),
   KoinComponent {
   private var hostReference = WeakReference<PlayerHost>(null)
-  private val hostOrNull: PlayerHost?
-    get() = hostReference.get()
+  private val host: PlayerHost
+    get() = checkNotNull(hostReference.get()) { "Player host is not attached" }
 
   fun attachHost(host: PlayerHost) {
     hostReference = WeakReference(host)
@@ -170,7 +170,6 @@ class PlayerViewModel : ViewModel(),
   private val json: Json by inject()
   private val playbackStateDao: app.infinity.mpvz.database.dao.PlaybackStateDao by inject()
   private val aiService: app.infinity.mpvz.repository.ai.AiService by inject()
-  private val embeddedSubtitleTranslator: app.infinity.mpvz.repository.ai.EmbeddedSubtitleTranslator by inject()
   private val subtitleGenerationService: SubtitleGenerationService by inject()
   private val realtimeSubtitleService: app.infinity.mpvz.repository.ai.RealtimeSubtitleService by inject()
   private val wyzieRepository: WyzieSearchRepository by inject()
@@ -283,10 +282,6 @@ class PlayerViewModel : ViewModel(),
 
   private var realtimeSubsJob: Job? = null
   private var realtimeSrtFile: java.io.File? = null
-  private var embeddedCueTranslationJob: Job? = null
-  private var lastEmbeddedCue = ""
-  private var embeddedTranslationRequestId = 0L
-  private var nativeSubtitleHiddenForTranslation = false
 
   private var playlistMetadataJob: Job? = null
   private var controlsVisibleForPolling = false
@@ -600,11 +595,8 @@ class PlayerViewModel : ViewModel(),
       media3Chapters,
     ) { node, media3 ->
       media3
-        ?: (runCatching {
-          node?.toObject<List<ChapterNode>>(json)?.mapIndexed { index, chapterNode ->
-            chapterNode.toSegment(index)
-          }?.toImmutableList()
-        }.getOrNull() ?: persistentListOf())
+        ?: (node?.toObject<List<ChapterNode>>(json)?.map { it.toSegment() }?.toImmutableList()
+          ?: persistentListOf())
     }.stateIn(viewModelScope, SharingStarted.Lazily, persistentListOf())
 
   fun setMedia3Chapters(chapters: List<dev.vivvvek.seeker.Segment>?) {
@@ -1098,9 +1090,6 @@ class PlayerViewModel : ViewModel(),
   val areControlsLocked: StateFlow<Boolean> = _areControlsLocked.asStateFlow()
 
   val playerUpdate = MutableStateFlow<PlayerUpdates>(PlayerUpdates.None)
-
-  private val _embeddedTranslatedSubtitle = MutableStateFlow<String?>(null)
-  val embeddedTranslatedSubtitle: StateFlow<String?> = _embeddedTranslatedSubtitle.asStateFlow()
   val isBrightnessSliderShown = MutableStateFlow(false)
   val isVolumeSliderShown = MutableStateFlow(false)
   val volumeSliderTimestamp = MutableStateFlow(0L)
@@ -1430,12 +1419,12 @@ class PlayerViewModel : ViewModel(),
         val currentlyPaused = PlaybackSession.getPropertyBoolean("pause") ?: false
         if (currentlyPaused != shouldPause) {
           if (!shouldPause) {
-            val focusGranted = withContext(Dispatchers.Main) { hostOrNull?.requestAudioFocus() ?: true }
+            val focusGranted = withContext(Dispatchers.Main) { host.requestAudioFocus() }
             if (!focusGranted) return@launch
           }
           PlaybackSession.setPropertyBoolean("pause", shouldPause)
           if (shouldPause) {
-            withContext(Dispatchers.Main) { hostOrNull?.abandonAudioFocus() }
+            withContext(Dispatchers.Main) { host.abandonAudioFocus() }
           }
         }
       }
@@ -1464,8 +1453,7 @@ class PlayerViewModel : ViewModel(),
     //   500 ms – paused
     viewModelScope.launch(playbackStateDispatcher) {
       while (isActive) {
-        val currentHost = withContext(Dispatchers.Main.immediate) { hostOrNull }
-        val media3Active = currentHost?.isMedia3Active() == true
+        val media3Active = withContext(Dispatchers.Main.immediate) { host.isMedia3Active() }
         if (!_isMpvCoreReady.value && !media3Active) {
           delay(250L)
           continue
@@ -1480,7 +1468,7 @@ class PlayerViewModel : ViewModel(),
         runCatching {
           val time =
             if (media3Active) {
-              (currentHost?.media3CurrentPositionMs()?.coerceAtLeast(0L)?.div(1000.0))
+              (host.media3CurrentPositionMs().coerceAtLeast(0L) / 1000.0)
             } else {
               PlaybackSession.getPropertyDouble("time-pos")
             }
@@ -1490,7 +1478,7 @@ class PlayerViewModel : ViewModel(),
               _precisePosition.value = posFloat
               updateLyricsActiveLine()
             }
-            val isPlaying = if (media3Active) currentHost?.media3IsPlaying() == true else paused != true
+            val isPlaying = if (media3Active) host.media3IsPlaying() else paused != true
             maybeAutoSkipIntro(time, isPlaying)
           }
           if (!media3Active && audioTimelineActive) {
@@ -1499,7 +1487,7 @@ class PlayerViewModel : ViewModel(),
               _preciseDuration.value = currentDuration.toFloat()
             }
           } else if (media3Active) {
-            val currentDuration = currentHost?.media3DurationMs()?.takeIf { it > 0L }?.div(1000.0)
+            val currentDuration = host.media3DurationMs().takeIf { it > 0L }?.div(1000.0)
             if (currentDuration != null && currentDuration.isFinite()) {
               _preciseDuration.value = currentDuration.toFloat()
             }
@@ -2494,142 +2482,6 @@ class PlayerViewModel : ViewModel(),
 
   private var translationJob: Job? = null
 
-  /**
-   * Translates the currently displayed embedded soft-subtitle cue when enabled. The request is
-   * debounced so rapidly changing cues cannot build an unbounded queue. The existing AI provider
-   * and endpoint preferences remain the source of truth; the player engine is not replaced.
-   */
-  fun setEmbeddedSubtitleTranslationEnabled(enabled: Boolean) {
-    aiPreferences.subtitleTranslationEnabled.set(enabled)
-    if (enabled) {
-      if (!nativeSubtitleHiddenForTranslation) {
-        PlaybackSession.setPropertyBoolean("sub-visibility", false)
-        nativeSubtitleHiddenForTranslation = true
-      }
-      syncSubtitleLayout()
-      val cue = lastEmbeddedCue
-      if (cue.isNotBlank()) {
-        lastEmbeddedCue = ""
-        translateEmbeddedSubtitleCue(cue)
-      }
-    } else {
-      resetEmbeddedSubtitleTranslation()
-    }
-    syncSubtitleLayout()
-  }
-
-  fun setEmbeddedSubtitleTranslationLanguage(language: String) {
-    aiPreferences.embeddedSubtitleTargetLanguage.set(language)
-    val cue = lastEmbeddedCue
-    if (cue.isNotBlank() && aiPreferences.subtitleTranslationEnabled.get()) {
-      lastEmbeddedCue = ""
-      translateEmbeddedSubtitleCue(cue)
-    }
-    syncSubtitleLayout()
-  }
-
-  fun handleEmbeddedSubtitleCueBlank() {
-    if (aiPreferences.subtitleTranslationEnabled.get()) {
-      clearEmbeddedSubtitleTranslationCue()
-    } else {
-      resetEmbeddedSubtitleTranslation()
-    }
-  }
-
-  /** Clears a transient blank cue without restoring native subtitles while translation remains on. */
-  fun clearEmbeddedSubtitleTranslationCue() {
-    embeddedTranslationRequestId += 1L
-    embeddedCueTranslationJob?.cancel()
-    embeddedCueTranslationJob = null
-    lastEmbeddedCue = ""
-    _translationStatus.value = ""
-    playerUpdate.value = PlayerUpdates.None
-    _embeddedTranslatedSubtitle.value = null
-    if (aiPreferences.subtitleTranslationEnabled.get() && !nativeSubtitleHiddenForTranslation) {
-      PlaybackSession.setPropertyBoolean("sub-visibility", false)
-      nativeSubtitleHiddenForTranslation = true
-    }
-  }
-
-  fun resetEmbeddedSubtitleTranslation() {
-    embeddedTranslationRequestId += 1L
-    embeddedCueTranslationJob?.cancel()
-    embeddedCueTranslationJob = null
-    lastEmbeddedCue = ""
-    _translationStatus.value = ""
-    playerUpdate.value = PlayerUpdates.None
-    _embeddedTranslatedSubtitle.value = null
-    if (nativeSubtitleHiddenForTranslation) {
-      PlaybackSession.setPropertyBoolean("sub-visibility", true)
-      nativeSubtitleHiddenForTranslation = false
-    }
-    syncSubtitleLayout()
-  }
-
-  fun translateEmbeddedSubtitleCue(rawCue: String) {
-    val cue = rawCue.trim()
-    if (cue.isBlank()) {
-      if (aiPreferences.subtitleTranslationEnabled.get()) {
-        clearEmbeddedSubtitleTranslationCue()
-      } else {
-        resetEmbeddedSubtitleTranslation()
-      }
-      return
-    }
-    if (cue == lastEmbeddedCue || !aiPreferences.subtitleTranslationEnabled.get()) return
-    val target =
-      (aiPreferences.embeddedSubtitleTargetLanguage.get().trim().takeIf { it.isNotBlank() }
-        ?: aiPreferences.autoTranslateLanguages.get().split(",").firstOrNull { it.isNotBlank() }?.trim())
-        ?.lowercase()
-        ?.substringBefore("-")
-        ?.substringBefore("_")
-        ?.takeIf { it.length in 2..8 }
-        ?: java.util.Locale.getDefault().language.takeIf { it.length in 2..8 }
-        ?: "en"
-    lastEmbeddedCue = cue
-    playerUpdate.value = PlayerUpdates.None
-    _embeddedTranslatedSubtitle.value = null
-    if (!nativeSubtitleHiddenForTranslation) {
-      PlaybackSession.setPropertyBoolean("sub-visibility", false)
-      nativeSubtitleHiddenForTranslation = true
-    }
-    val requestId = ++embeddedTranslationRequestId
-    embeddedCueTranslationJob = viewModelScope.launch(Dispatchers.IO) {
-      // Request the newest cue immediately. Older requests are cancelled and guarded by requestId
-      // so a slow response can never overwrite the current cue.
-      _translationStatus.value = "Translating embedded subtitle…"
-      val translationResult =
-        if (aiPreferences.embeddedSubtitleTranslationProvider.get().trim().isBlank() ||
-          aiPreferences.embeddedSubtitleTranslationProvider.get().trim().equals("Google Translate", ignoreCase = true)
-        ) {
-          embeddedSubtitleTranslator.translateGoogle(cue, target)
-        } else {
-          aiService.generateWithAi(
-            cue,
-            app.infinity.mpvz.repository.ai.AiTask.TRANSLATE,
-            "Translate only into $target. Return only the translated subtitle text; preserve line breaks and do not add commentary.",
-          )
-        }
-      translationResult
-        .onSuccess { translated ->
-          withContext(Dispatchers.Main.immediate) {
-            val translatedText = translated.trim()
-            if (requestId == embeddedTranslationRequestId && cue == lastEmbeddedCue && translatedText.isNotBlank()) {
-              _embeddedTranslatedSubtitle.value = translatedText
-              playerUpdate.value = PlayerUpdates.TranslatedSubtitle(translatedText)
-            }
-            if (requestId == embeddedTranslationRequestId) _translationStatus.value = ""
-          }
-        }
-        .onFailure { error ->
-          if (requestId == embeddedTranslationRequestId) {
-            android.util.Log.w("PlayerViewModel", "Embedded subtitle translation failed", error)
-            withContext(Dispatchers.Main.immediate) { _translationStatus.value = "" }
-          }
-        }
-    }
-  }
-
   fun translateSubtitle(
     track: TrackNode,
     targetLanguage: String,
@@ -2783,7 +2635,7 @@ class PlayerViewModel : ViewModel(),
   }
 
   private fun currentVideoUriForSubtitleGeneration(): Uri? {
-    val media = hostOrNull?.currentMediaLookupHint()?.takeIf { it.isNotBlank() } ?: return null
+    val media = host.currentMediaLookupHint()?.takeIf { it.isNotBlank() } ?: return null
     return if (media.startsWith("/")) File(media).toUri() else Uri.parse(media)
   }
 
@@ -3062,11 +2914,9 @@ class PlayerViewModel : ViewModel(),
       }
     if (!autoSkipEnabled) return
 
-    val currentHost = hostOrNull
-    val isMedia3 = currentHost?.isMedia3Active() == true
     val seekAccepted =
-      if (isMedia3) {
-        currentHost?.media3SeekTo((activeSegment.endSeconds * 1000.0).toLong(), fast = true) ?: true
+      if (host.isMedia3Active()) {
+        host.media3SeekTo((activeSegment.endSeconds * 1000.0).toLong(), fast = true)
       } else {
         PlaybackSession.setPropertyDouble("time-pos", activeSegment.endSeconds)
         true
@@ -3075,7 +2925,7 @@ class PlayerViewModel : ViewModel(),
     skippedSegmentTypes += activeSegment.type
     syncplayManager.updatePlayerState(
       activeSegment.endSeconds,
-      if (isMedia3) currentHost?.media3IsPlaying() == false else (PlaybackSession.getPropertyBoolean("pause") ?: false),
+      if (host.isMedia3Active()) !host.media3IsPlaying() else (PlaybackSession.getPropertyBoolean("pause") ?: false),
       doSeek = true,
     )
     showToast("${activeSegment.label} (auto)")
@@ -3083,11 +2933,10 @@ class PlayerViewModel : ViewModel(),
 
   fun skipActiveSegment() {
     val segment = _currentSkippableSegment.value ?: return
-    val currentHost = hostOrNull
-    val media3Active = currentHost?.isMedia3Active() == true
+    val media3Active = host.isMedia3Active()
     val seekAccepted =
       if (media3Active) {
-        currentHost?.media3SeekTo((segment.endSeconds * 1000.0).toLong(), fast = true) ?: true
+        host.media3SeekTo((segment.endSeconds * 1000.0).toLong(), fast = true)
       } else {
         PlaybackSession.setPropertyDouble("time-pos", segment.endSeconds)
         true
@@ -3096,7 +2945,7 @@ class PlayerViewModel : ViewModel(),
     skippedSegmentTypes += segment.type
     syncplayManager.updatePlayerState(
       segment.endSeconds,
-      if (media3Active) currentHost?.media3IsPlaying() == false else (PlaybackSession.getPropertyBoolean("pause") ?: false),
+      if (media3Active) !host.media3IsPlaying() else (PlaybackSession.getPropertyBoolean("pause") ?: false),
       doSeek = true,
     )
     showToast("${segment.label}")
@@ -3143,12 +2992,12 @@ class PlayerViewModel : ViewModel(),
 
     val lookupKey = mediaTitle
     val provider = playerPreferences.introSegmentProvider.get()
-    val lookupHints = hostOrNull?.currentPlayerLookupHints() ?: PlayerLookupHints()
+    val lookupHints = host.currentPlayerLookupHints()
     val lookupRequest =
       IntroDbLookupRequest(
         mediaTitle = mediaTitle,
         canonicalTitle = lookupHints.canonicalTitle,
-        lookupHint = hostOrNull?.currentMediaLookupHint(),
+        lookupHint = host.currentMediaLookupHint(),
         imdbId = lookupHints.imdbId,
         tmdbId = lookupHints.tmdbId,
         mediaType = lookupHints.mediaType,
@@ -3599,7 +3448,7 @@ class PlayerViewModel : ViewModel(),
   }
 
   fun removeSubtitle(id: Int) {
-    if (hostOrNull?.isMedia3Active() == true) return
+    if (host.isMedia3Active()) return
     viewModelScope.launch(Dispatchers.IO) {
       // Find the subtitle track info before removing
       val tracks = subtitleTracks.value
@@ -3905,9 +3754,8 @@ class PlayerViewModel : ViewModel(),
   }
 
   fun disableSubtitles() {
-    val currentHost = hostOrNull
-    if (currentHost?.isMedia3Active() == true) {
-      currentHost.media3DisableSubtitles()
+    if (host.isMedia3Active()) {
+      host.media3DisableSubtitles()
       return
     }
     setTrackSelectionId("sid", null)
@@ -3916,12 +3764,11 @@ class PlayerViewModel : ViewModel(),
   }
 
   fun toggleSubtitle(id: Int) {
-    val currentHost = hostOrNull
-    if (currentHost?.isMedia3Active() == true) {
-      if (currentHost.media3IsSubtitleSelected(id)) {
-        currentHost.media3UnselectSubtitleTrack(id)
+    if (host.isMedia3Active()) {
+      if (host.media3IsSubtitleSelected(id)) {
+        host.media3UnselectSubtitleTrack(id)
       } else {
-        currentHost.media3SelectSubtitleTrack(id)
+        host.media3SelectSubtitleTrack(id)
       }
       return
     }
@@ -3946,16 +3793,14 @@ class PlayerViewModel : ViewModel(),
   }
 
   fun isSubtitleSelected(id: Int): Boolean {
-    val currentHost = hostOrNull
-    if (currentHost?.isMedia3Active() == true) return currentHost.media3IsSubtitleSelected(id)
+    if (host.isMedia3Active()) return host.media3IsSubtitleSelected(id)
     val primarySid = getTrackSelectionId("sid")
     val secondarySid = getTrackSelectionId("secondary-sid")
     return (id == primarySid && primarySid > 0) || (id == secondarySid && secondarySid > 0)
   }
 
   fun subtitleSelectionIndicator(id: Int): String? {
-    val currentHost = hostOrNull
-    if (currentHost?.isMedia3Active() == true) return "P".takeIf { currentHost.media3IsSubtitleSelected(id) }
+    if (host.isMedia3Active()) return "P".takeIf { host.media3IsSubtitleSelected(id) }
     val primarySid = getTrackSelectionId("sid")
     val secondarySid = getTrackSelectionId("secondary-sid")
     return when {
@@ -3993,24 +3838,23 @@ class PlayerViewModel : ViewModel(),
       hostReference.get()?.isCurrentMediaKnownAudio() == true
 
   private fun shouldRoutePlaybackCommandToMedia3(): Boolean =
-    hostOrNull?.isMedia3Active() == true && !isAudioPlaybackActive()
+    host.isMedia3Active() && !isAudioPlaybackActive()
 
   fun pauseUnpause() {
     viewModelScope.launch(playbackStateDispatcher) {
-      val currentHost = hostOrNull
-      if (shouldRoutePlaybackCommandToMedia3() && currentHost != null) {
-        val shouldPlay = withContext(Dispatchers.Main.immediate) { !currentHost.media3IsPlaying() }
+      if (shouldRoutePlaybackCommandToMedia3()) {
+        val shouldPlay = withContext(Dispatchers.Main.immediate) { !host.media3IsPlaying() }
         if (shouldPlay) {
-          val focusGranted = withContext(Dispatchers.Main.immediate) { currentHost.requestAudioFocus() }
+          val focusGranted = withContext(Dispatchers.Main.immediate) { host.requestAudioFocus() }
           if (!focusGranted) return@launch
         }
-        withContext(Dispatchers.Main.immediate) { currentHost.media3SetPlayWhenReady(shouldPlay) }
-        if (!shouldPlay) withContext(Dispatchers.Main.immediate) { currentHost.abandonAudioFocus() }
+        withContext(Dispatchers.Main.immediate) { host.media3SetPlayWhenReady(shouldPlay) }
+        if (!shouldPlay) withContext(Dispatchers.Main.immediate) { host.abandonAudioFocus() }
         return@launch
       }
       val wasPaused = PlaybackSession.getPropertyBoolean("pause") ?: PlaybackSession.state.value.paused
       if (wasPaused) {
-        val focusGranted = withContext(Dispatchers.Main) { currentHost?.requestAudioFocus() ?: true }
+        val focusGranted = withContext(Dispatchers.Main) { host.requestAudioFocus() }
         // MPV remains the authoritative owner for music. Android focus can be temporarily denied
         // by a stale notification/native session; that must not turn the MPV pause button into a
         // no-op when audio is already the active item.
@@ -4020,35 +3864,33 @@ class PlayerViewModel : ViewModel(),
       } else {
         PlaybackSession.setPropertyBoolean("pause", true)
         syncplayManager.updatePlayerState(precisePosition.value.toDouble(), true, doSeek = false)
-        withContext(Dispatchers.Main) { currentHost?.abandonAudioFocus() }
+        withContext(Dispatchers.Main) { host.abandonAudioFocus() }
       }
     }
   }
 
   fun pause() {
     viewModelScope.launch(playbackStateDispatcher) {
-      val currentHost = hostOrNull
-      if (shouldRoutePlaybackCommandToMedia3() && currentHost != null) {
-        withContext(Dispatchers.Main.immediate) { currentHost.media3SetPlayWhenReady(false) }
-        withContext(Dispatchers.Main.immediate) { currentHost.abandonAudioFocus() }
+      if (shouldRoutePlaybackCommandToMedia3()) {
+        withContext(Dispatchers.Main.immediate) { host.media3SetPlayWhenReady(false) }
+        withContext(Dispatchers.Main.immediate) { host.abandonAudioFocus() }
         return@launch
       }
       PlaybackSession.setPropertyBoolean("pause", true)
       syncplayManager.updatePlayerState(precisePosition.value.toDouble(), true, doSeek = false)
-      withContext(Dispatchers.Main) { currentHost?.abandonAudioFocus() }
+      withContext(Dispatchers.Main) { host.abandonAudioFocus() }
     }
   }
 
   fun unpause() {
     viewModelScope.launch(playbackStateDispatcher) {
-      val currentHost = hostOrNull
-      if (shouldRoutePlaybackCommandToMedia3() && currentHost != null) {
-        val focusGranted = withContext(Dispatchers.Main.immediate) { currentHost.requestAudioFocus() }
+      if (shouldRoutePlaybackCommandToMedia3()) {
+        val focusGranted = withContext(Dispatchers.Main.immediate) { host.requestAudioFocus() }
         if (!focusGranted) return@launch
-        withContext(Dispatchers.Main.immediate) { currentHost.media3SetPlayWhenReady(true) }
+        withContext(Dispatchers.Main.immediate) { host.media3SetPlayWhenReady(true) }
         return@launch
       }
-      val focusGranted = withContext(Dispatchers.Main) { currentHost?.requestAudioFocus() ?: true }
+      val focusGranted = withContext(Dispatchers.Main) { host.requestAudioFocus() }
       if (!focusGranted && !isAudioPlaybackActive()) return@launch
       PlaybackSession.setPropertyBoolean("pause", false)
       syncplayManager.updatePlayerState(precisePosition.value.toDouble(), false, doSeek = false)
@@ -4056,18 +3898,16 @@ class PlayerViewModel : ViewModel(),
   }
 
   fun setPlaybackSpeed(speed: Float) {
-    val currentHost = hostOrNull
-    if (shouldRoutePlaybackCommandToMedia3() && currentHost != null) {
-      currentHost.media3SetPlaybackSpeed(speed)
+    if (shouldRoutePlaybackCommandToMedia3()) {
+      host.media3SetPlaybackSpeed(speed)
     } else {
       PlaybackSession.setPropertyFloat("speed", speed)
     }
   }
 
   fun selectAudioTrack(track: TrackNode) {
-    val currentHost = hostOrNull
-    if (shouldRoutePlaybackCommandToMedia3() && currentHost != null) {
-      currentHost.media3SelectAudioTrack(track.id)
+    if (shouldRoutePlaybackCommandToMedia3()) {
+      host.media3SelectAudioTrack(track.id)
     } else {
       if (getTrackSelectionId("aid") == track.id) {
         setTrackSelectionId("aid", null)
@@ -4088,15 +3928,12 @@ class PlayerViewModel : ViewModel(),
     ) return
     if (!isAudioOnly.value) {
       try {
-        val currentHost = hostOrNull
-        if (currentHost != null) {
-          if (playerPreferences.showSystemStatusBar.get()) {
-            currentHost.windowInsetsController.show(WindowInsetsCompat.Type.statusBars())
-            currentHost.windowInsetsController.isAppearanceLightStatusBars = false
-          }
-          if (playerPreferences.showSystemNavigationBar.get()) {
-            currentHost.windowInsetsController.show(WindowInsetsCompat.Type.navigationBars())
-          }
+        if (playerPreferences.showSystemStatusBar.get()) {
+          host.windowInsetsController.show(WindowInsetsCompat.Type.statusBars())
+          host.windowInsetsController.isAppearanceLightStatusBars = false
+        }
+        if (playerPreferences.showSystemNavigationBar.get()) {
+          host.windowInsetsController.show(WindowInsetsCompat.Type.navigationBars())
         }
       } catch (e: Exception) {
         // Defensive: InsetsController animation can crash under FD pressure
@@ -4111,11 +3948,8 @@ class PlayerViewModel : ViewModel(),
   fun hideControls() {
     if (!isAudioOnly.value) {
       try {
-        val currentHost = hostOrNull
-        if (currentHost != null) {
-          currentHost.windowInsetsController.hide(WindowInsetsCompat.Type.statusBars())
-          currentHost.windowInsetsController.hide(WindowInsetsCompat.Type.navigationBars())
-        }
+        host.windowInsetsController.hide(WindowInsetsCompat.Type.statusBars())
+        host.windowInsetsController.hide(WindowInsetsCompat.Type.navigationBars())
       } catch (e: Exception) {
         Log.e(TAG, "Failed to hide system bars", e)
       }
@@ -4129,11 +3963,8 @@ class PlayerViewModel : ViewModel(),
   fun autoHideControls() {
     if (!isAudioOnly.value) {
       try {
-        val currentHost = hostOrNull
-        if (currentHost != null) {
-          currentHost.windowInsetsController.hide(WindowInsetsCompat.Type.statusBars())
-          currentHost.windowInsetsController.hide(WindowInsetsCompat.Type.navigationBars())
-        }
+        host.windowInsetsController.hide(WindowInsetsCompat.Type.statusBars())
+        host.windowInsetsController.hide(WindowInsetsCompat.Type.navigationBars())
       } catch (e: Exception) {
         Log.e(TAG, "Failed to hide system bars", e)
       }
@@ -4165,7 +3996,7 @@ class PlayerViewModel : ViewModel(),
       return
     }
 
-    if (hostOrNull?.isCurrentMediaKnownAudio() == true || isAudioOnly.value) {
+    if (host.isCurrentMediaKnownAudio() || isAudioOnly.value) {
       hideSeekThumbnailPreview()
       return
     }
@@ -4446,7 +4277,7 @@ class PlayerViewModel : ViewModel(),
       runCatching { PlaybackSession.getPropertyString("stream-open-filename") }
         .getOrNull()
     val mediaPath = runCatching { PlaybackSession.getPropertyString("path") }.getOrNull()
-    val hostPath = runCatching { hostOrNull?.currentThumbnailSource() }.getOrNull()
+    val hostPath = runCatching { host.currentThumbnailSource() }.getOrNull()
     val primary =
       firstSeekPreviewSource(
         streamPath,
@@ -4517,37 +4348,37 @@ class PlayerViewModel : ViewModel(),
   // ==================== Seeking ====================
 
   /** Returns whether seek gestures should target the Media3 controller rather than libmpv. */
-  fun isMedia3ActiveForGesture(): Boolean = hostOrNull?.isMedia3Active() == true
+  fun isMedia3ActiveForGesture(): Boolean = host.isMedia3Active()
 
   /** Returns the active engine's playing state for long-press gestures. */
   fun isPlayingForGesture(): Boolean =
-    if (hostOrNull?.isMedia3Active() == true) {
-      hostOrNull?.media3IsPlaying() == true
+    if (host.isMedia3Active()) {
+      host.media3IsPlaying()
     } else {
       !(PlaybackSession.getPropertyBoolean("pause") ?: true)
     }
 
   /** Returns the active engine's speed so a temporary hold-speed gesture can restore it safely. */
   fun playbackSpeedForGesture(): Float =
-    if (hostOrNull?.isMedia3Active() == true) {
-      (hostOrNull?.media3PlaybackSpeed() ?: 1f).coerceIn(0.1f, 8f)
+    if (host.isMedia3Active()) {
+      host.media3PlaybackSpeed().coerceIn(0.1f, 8f)
     } else {
       (PlaybackSession.getPropertyFloat("speed") ?: 1f).coerceIn(0.1f, 8f)
     }
 
   /** Live Media3 position used by gesture seeking; MPV is stopped while Media3 owns playback. */
   fun media3GesturePositionSeconds(): Double =
-    ((hostOrNull?.media3CurrentPositionMs()?.coerceAtLeast(0L) ?: 0L) / 1000.0).takeIf { it.isFinite() } ?: 0.0
+    (host.media3CurrentPositionMs().coerceAtLeast(0L) / 1000.0).takeIf { it.isFinite() } ?: 0.0
 
   /** Live Media3 duration used by gesture seeking; zero means the timeline is not ready yet. */
   fun media3GestureDurationSeconds(): Double =
-    (hostOrNull?.media3DurationMs()?.takeIf { it > 0L }?.div(1000.0) ?: 0.0)
+    (host.media3DurationMs().takeIf { it > 0L }?.div(1000.0) ?: 0.0)
       .takeIf { it.isFinite() }
       ?: 0.0
 
   /** Returns whether the active engine currently has a selected subtitle track. */
   fun hasActiveSubtitleForGesture(): Boolean {
-    if (hostOrNull?.isMedia3Active() == true) return hostOrNull?.media3HasSelectedSubtitle() == true
+    if (host.isMedia3Active()) return host.media3HasSelectedSubtitle()
     return getTrackSelectionId("sid") > 0 || getTrackSelectionId("secondary-sid") > 0
   }
 
@@ -4555,17 +4386,16 @@ class PlayerViewModel : ViewModel(),
 
   /** Returns the active engine’s subtitle scale for the next pinch gesture. */
   fun subtitleScaleForGesture(): Float {
-    if (hostOrNull?.isMedia3Active() == true) return nativeSubtitleScale
+    if (host.isMedia3Active()) return nativeSubtitleScale
     return PlaybackSession.getPropertyFloat("sub-scale") ?: subtitlesPreferences.subScale.get()
   }
 
   /** Applies a shared subtitle scale to the active playback engine. */
   fun setSubtitleScaleForGesture(scale: Float) {
     val clampedScale = scale.coerceIn(0.1f, 5.0f)
-    val currentHost = hostOrNull
-    if (currentHost?.isMedia3Active() == true) {
+    if (host.isMedia3Active()) {
       nativeSubtitleScale = clampedScale
-      currentHost.media3SetSubtitleScale(clampedScale)
+      host.media3SetSubtitleScale(clampedScale)
     } else {
       PlaybackSession.setPropertyFloat("sub-scale", clampedScale)
     }
@@ -4573,16 +4403,14 @@ class PlayerViewModel : ViewModel(),
 
   /** Applies the shared subtitle position to the active Native renderer. */
   fun setNativeSubtitlePosition(position: Int) {
-    val currentHost = hostOrNull
-    if (currentHost?.isMedia3Active() == true) {
-      currentHost.media3SetSubtitlePosition(position.coerceIn(0, 150))
+    if (host.isMedia3Active()) {
+      host.media3SetSubtitlePosition(position.coerceIn(0, 150))
     }
   }
 
   /** Applies saved subtitle colors and border settings to the active Native renderer. */
   fun applyNativeSubtitleStyle() {
-    val currentHost = hostOrNull
-    if (currentHost?.isMedia3Active() != true) return
+    if (!host.isMedia3Active()) return
     val borderStyle = subtitlesPreferences.borderStyle.get()
     val shadowOffset = subtitlesPreferences.shadowOffset.get()
     val edgeType =
@@ -4592,7 +4420,7 @@ class PlayerViewModel : ViewModel(),
         shadowOffset != 0 -> androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW
         else -> androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_OUTLINE
       }
-    currentHost.media3ApplySubtitleStyle(
+    host.media3ApplySubtitleStyle(
       textColor = subtitlesPreferences.textColor.get(),
       backgroundColor = subtitlesPreferences.backgroundColor.get(),
       edgeType = edgeType,
@@ -4608,7 +4436,7 @@ class PlayerViewModel : ViewModel(),
   fun seekBy(offset: Int) {
     if (shouldRoutePlaybackCommandToMedia3()) {
       viewModelScope.launch(Dispatchers.Main.immediate) {
-        hostOrNull?.media3SeekBy(offset.toLong() * 1000L)
+        host.media3SeekBy(offset.toLong() * 1000L)
       }
       return
     }
@@ -4821,7 +4649,7 @@ class PlayerViewModel : ViewModel(),
   ) {
     if (shouldRoutePlaybackCommandToMedia3()) {
       viewModelScope.launch(Dispatchers.Main.immediate) {
-        hostOrNull?.media3SeekTo(
+        host.media3SeekTo(
           (position.coerceAtLeast(0.0) * 1000.0).toLong(),
           fast = fast,
         )
@@ -4993,12 +4821,11 @@ class PlayerViewModel : ViewModel(),
   // ==================== Brightness & Volume ====================
 
   fun changeBrightnessTo(brightness: Float) {
-    val currentHost = hostOrNull ?: return
-    val isAudio = currentHost.isCurrentMediaKnownAudio() || isAudioOnly.value
+    val isAudio = host.isCurrentMediaKnownAudio() || isAudioOnly.value
     val minBrightness = if (isAudio) 0f else -0.75f
     val coercedBrightness = brightness.coerceIn(minBrightness, 1f)
-    currentHost.hostWindow.attributes =
-      currentHost.hostWindow.attributes.apply {
+    host.hostWindow.attributes =
+      host.hostWindow.attributes.apply {
         screenBrightness = coercedBrightness.coerceIn(0f, 1f)
       }
     currentBrightness.value = coercedBrightness
@@ -5024,17 +4851,15 @@ class PlayerViewModel : ViewModel(),
     val systemBrightness =
       runCatching {
         Settings.System
-            .getFloat(appContext.contentResolver, Settings.System.SCREEN_BRIGHTNESS)
-            .coerceIn(0f, 255f) / 255f
+          .getFloat(appContext.contentResolver, Settings.System.SCREEN_BRIGHTNESS)
+          .coerceIn(0f, 255f) / 255f
       }.getOrNull() ?: 0f
     currentBrightness.value = systemBrightness
     runCatching {
-      hostOrNull?.let { currentHost ->
-        currentHost.hostWindow.attributes =
-          currentHost.hostWindow.attributes.apply {
-            screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
-          }
-      }
+      host.hostWindow.attributes =
+        host.hostWindow.attributes.apply {
+          screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+        }
     }
   }
 
@@ -5042,7 +4867,7 @@ class PlayerViewModel : ViewModel(),
     change: Int,
     showUi: Boolean = false,
   ) {
-    val isAudio = hostOrNull?.isCurrentMediaKnownAudio() == true || isAudioOnly.value
+    val isAudio = host.isCurrentMediaKnownAudio() || isAudioOnly.value
     val currentSystemVolume = syncCurrentSystemVolume()
     val mpvVolume = PlaybackSession.getPropertyInt("volume") ?: 100
     // Audio playback must not apply gain boost (>100%). Boost is a video-only feature,
@@ -5153,8 +4978,7 @@ class PlayerViewModel : ViewModel(),
   ) {
     // Media3 applies the selected aspect through PlayerView.resizeMode in PlayerActivity.
     // These libmpv properties must only be written while MPV owns the item.
-    val currentHost = hostOrNull
-    if (currentHost == null || !currentHost.isMedia3Active()) {
+    if (!host.isMedia3Active()) {
       when (aspect) {
         VideoAspect.Fit -> {
           PlaybackSession.setPropertyDouble("panscan", 0.0)
@@ -5165,20 +4989,17 @@ class PlayerViewModel : ViewModel(),
           PlaybackSession.setPropertyDouble("panscan", 1.0)
         }
         VideoAspect.Stretch -> {
-          val display = currentHost?.hostWindowManager?.defaultDisplay
-          if (display != null) {
-            @Suppress("DEPRECATION")
-            val dm = DisplayMetrics()
-            @Suppress("DEPRECATION")
-            display.getRealMetrics(dm)
-            val rotate = PlaybackSession.getPropertyInt("video-params/rotate") ?: 0
-            val isVideoRotated = (rotate % 180 == 90)
-            val screenRatio =
-              if (isVideoRotated) dm.heightPixels.toDouble() / dm.widthPixels.toDouble()
-              else dm.widthPixels.toDouble() / dm.heightPixels.toDouble()
-            PlaybackSession.setPropertyDouble("video-aspect-override", screenRatio)
-            PlaybackSession.setPropertyDouble("panscan", 0.0)
-          }
+          @Suppress("DEPRECATION")
+          val dm = DisplayMetrics()
+          @Suppress("DEPRECATION")
+          host.hostWindowManager.defaultDisplay.getRealMetrics(dm)
+          val rotate = PlaybackSession.getPropertyInt("video-params/rotate") ?: 0
+          val isVideoRotated = (rotate % 180 == 90)
+          val screenRatio =
+            if (isVideoRotated) dm.heightPixels.toDouble() / dm.widthPixels.toDouble()
+            else dm.widthPixels.toDouble() / dm.heightPixels.toDouble()
+          PlaybackSession.setPropertyDouble("video-aspect-override", screenRatio)
+          PlaybackSession.setPropertyDouble("panscan", 0.0)
         }
       }
     }
@@ -5199,8 +5020,7 @@ class PlayerViewModel : ViewModel(),
     ratio: Double,
     showUpdate: Boolean = true,
   ) {
-    val currentHost = hostOrNull
-    if (currentHost == null || !currentHost.isMedia3Active()) {
+    if (!host.isMedia3Active()) {
       PlaybackSession.setPropertyDouble("panscan", 0.0)
       PlaybackSession.setPropertyDouble("video-aspect-override", ratio)
     }
@@ -5224,15 +5044,14 @@ class PlayerViewModel : ViewModel(),
   // ==================== Screen Rotation ====================
 
   fun cycleScreenRotations() {
-    val currentHost = hostOrNull ?: return
     if (isAudioOnly.value) {
-      currentHost.hostRequestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+      host.hostRequestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
       return
     }
     // Temporarily cycle orientation WITHOUT modifying preferences
     // Preferences remain the single source of truth and will be reapplied on next video
-    currentHost.hostRequestedOrientation =
-      when (currentHost.hostRequestedOrientation) {
+    host.hostRequestedOrientation =
+      when (host.hostRequestedOrientation) {
         ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE,
         ActivityInfo.SCREEN_ORIENTATION_REVERSE_LANDSCAPE,
         ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
@@ -5426,8 +5245,7 @@ class PlayerViewModel : ViewModel(),
 
   fun setVideoZoom(zoom: Float) {
     _videoZoom.value = zoom
-    val currentHost = hostOrNull
-    if (currentHost == null || !currentHost.isMedia3Active()) {
+    if (!host.isMedia3Active()) {
       runCatching { PlaybackSession.setPropertyDouble("video-zoom", zoom.toDouble()) }
     }
   }
@@ -5475,10 +5293,9 @@ class PlayerViewModel : ViewModel(),
   }
 
   private fun refreshFrameInfoFromMedia3() {
-    val currentHost = hostOrNull ?: return
-    val frameDurationMs = currentHost.media3FrameDurationMs() ?: return
-    val positionMs = currentHost.media3CurrentPositionMs().coerceAtLeast(0L)
-    val durationMs = currentHost.media3DurationMs().takeIf { it > 0L } ?: 0L
+    val frameDurationMs = host.media3FrameDurationMs() ?: return
+    val positionMs = host.media3CurrentPositionMs().coerceAtLeast(0L)
+    val durationMs = host.media3DurationMs().takeIf { it > 0L } ?: 0L
     _currentFrame.value = (positionMs / frameDurationMs).toInt()
     _totalFrames.value = if (durationMs > 0L) (durationMs / frameDurationMs).toInt() else 0
   }
@@ -5487,7 +5304,7 @@ class PlayerViewModel : ViewModel(),
     frameNavigationJob?.cancel()
     frameNavigationJob =
       viewModelScope.launch(playbackStateDispatcher) {
-        if (withContext(Dispatchers.Main.immediate) { hostOrNull?.isMedia3Active() == true }) {
+        if (withContext(Dispatchers.Main.immediate) { host.isMedia3Active() }) {
           withContext(Dispatchers.Main.immediate) { refreshFrameInfoFromMedia3() }
         } else {
           refreshFrameInfoFromMpv()
@@ -5523,23 +5340,22 @@ class PlayerViewModel : ViewModel(),
     frameNavigationJob =
       viewModelScope.launch(playbackStateDispatcher) {
         try {
-          val currentHost = withContext(Dispatchers.Main.immediate) { hostOrNull }
-          if (currentHost?.isMedia3Active() == true) {
+          if (withContext(Dispatchers.Main.immediate) { host.isMedia3Active() }) {
             val frameDurationMs =
-              withContext(Dispatchers.Main.immediate) { currentHost.media3FrameDurationMs() }
+              withContext(Dispatchers.Main.immediate) { host.media3FrameDurationMs() }
                 ?: 40L
             val offsetMs = if (command == "frame-step") frameDurationMs else -frameDurationMs
             withContext(Dispatchers.Main.immediate) {
               // Media3 has no native frame-step command. Pause first so playback cannot run past
               // the requested frame while the exact seek is being resolved.
-              if (currentHost.media3IsPlaying()) currentHost.media3SetPlayWhenReady(false)
-              currentHost.media3SeekFrameBy(offsetMs)
+              if (host.media3IsPlaying()) host.media3SetPlayWhenReady(false)
+              host.media3SeekFrameBy(offsetMs)
             }
             // Give the renderer a short opportunity to publish the newly decoded frame before
             // reading its position for the frame-info overlay.
             delay(75)
             withContext(Dispatchers.Main.immediate) {
-              if (currentHost.isMedia3Active()) {
+              if (host.isMedia3Active()) {
                 refreshFrameInfoFromMedia3()
                 showFrameInfoOverlay()
                 resetFrameNavigationTimer()
@@ -5553,13 +5369,13 @@ class PlayerViewModel : ViewModel(),
           }
           // Engine switching can happen while the pause request is in flight. Never send an MPV
           // frame command after Media3 has taken ownership of the item.
-          if (withContext(Dispatchers.Main.immediate) { hostOrNull?.isMedia3Active() == true }) return@launch
+          if (withContext(Dispatchers.Main.immediate) { host.isMedia3Active() }) return@launch
           runCatching { PlaybackSession.command("no-osd", command) }
             .onFailure { error -> Log.w("PlayerViewModel", "Frame navigation command failed", error) }
           delay(100)
           refreshFrameInfoFromMpv()
           withContext(Dispatchers.Main.immediate) {
-            if (hostOrNull?.isMedia3Active() != true) {
+            if (!host.isMedia3Active()) {
               showFrameInfoOverlay()
               resetFrameNavigationTimer()
             }
@@ -5657,7 +5473,7 @@ class PlayerViewModel : ViewModel(),
 
   fun getPlaylistData(): List<app.infinity.mpvz.ui.player.controls.components.sheets.PlaylistItem>? {
     val queue = PlaybackSession.queue.value
-    if (queue.items.isEmpty() || queue.currentIndex !in queue.items.indices) return null
+    if (queue.items.size <= 1 || queue.currentIndex !in queue.items.indices) return null
 
     // Get current video progress
     val currentPos = pos ?: 0
@@ -5680,12 +5496,11 @@ class PlayerViewModel : ViewModel(),
         }
       val path = resolvedUri.toString()
       val isAudio =
-        item.mimeType?.startsWith("audio/", ignoreCase = true) == true ||
-          path
-            .substringBefore('?')
-            .substringBefore('#')
-            .substringAfterLast('.', "")
-            .lowercase() in FileTypeUtils.AUDIO_EXTENSIONS ||
+        path
+          .substringBefore('?')
+          .substringBefore('#')
+          .substringAfterLast('.', "")
+          .lowercase() in FileTypeUtils.AUDIO_EXTENSIONS ||
           resolvedUri.toString().lowercase().contains("audio") ||
           uri.toString().lowercase().contains("audio")
       val isCurrentlyPlaying = index == queue.currentIndex
@@ -5948,22 +5763,22 @@ class PlayerViewModel : ViewModel(),
 
   /** Re-run folder discovery for a standalone launch before refreshing the playlist sheet. */
   fun refreshCurrentFolderQueue() {
-    hostOrNull?.refreshCurrentFolderQueue()
+    host.refreshCurrentFolderQueue()
   }
 
   fun playPlaylistItem(index: Int) {
-    hostOrNull?.playQueueItem(index)
+    host.playQueueItem(index)
   }
 
   fun reorderPlaylistItem(
     from: Int,
     to: Int,
   ) {
-    hostOrNull?.reorderQueueItem(from, to)
+    host.reorderQueueItem(from, to)
   }
 
   fun removePlaylistItem(index: Int) {
-    hostOrNull?.removeQueueItem(index)
+    host.removeQueueItem(index)
   }
 
   /**
@@ -6069,11 +5884,11 @@ class PlayerViewModel : ViewModel(),
   fun hasPrevious(): Boolean = PlaybackSession.hasPrevious()
 
   fun playNext() {
-    hostOrNull?.playNextQueueItem()
+    host.playNextQueueItem()
   }
 
   fun playPrevious() {
-    hostOrNull?.playPreviousQueueItem()
+    host.playPreviousQueueItem()
   }
 
   // ==================== Repeat and Shuffle ====================
@@ -6081,7 +5896,7 @@ class PlayerViewModel : ViewModel(),
   fun applyPersistedShuffleState() {
     PlaybackSession.setShuffleEnabled(_shuffleEnabled.value)
     if (_shuffleEnabled.value) {
-      hostOrNull?.onQueueShuffleChanged(true)
+      host.onQueueShuffleChanged(true)
     }
   }
 
@@ -6098,7 +5913,7 @@ class PlayerViewModel : ViewModel(),
     // Persist the repeat mode
     playerPreferences.repeatMode.set(_repeatMode.value)
     PlaybackSession.setRepeatMode(_repeatMode.value)
-    hostOrNull?.media3SetRepeatMode(_repeatMode.value)
+    host.media3SetRepeatMode(_repeatMode.value)
 
     // Show overlay update instead of toast
     playerUpdate.value = PlayerUpdates.RepeatMode(_repeatMode.value)
@@ -6112,7 +5927,7 @@ class PlayerViewModel : ViewModel(),
     PlaybackSession.setShuffleEnabled(_shuffleEnabled.value)
 
     // Notify activity to handle shuffle state change
-    hostOrNull?.onQueueShuffleChanged(_shuffleEnabled.value)
+    host.onQueueShuffleChanged(_shuffleEnabled.value)
 
     // Show overlay update instead of toast
     playerUpdate.value = PlayerUpdates.Shuffle(_shuffleEnabled.value)
@@ -6132,35 +5947,31 @@ class PlayerViewModel : ViewModel(),
   }
 
   fun setLoopA() {
-    val currentHost = hostOrNull
     if (_abLoopState.value.a != null) {
       _abLoopState.update { it.copy(a = null) }
-      if (currentHost?.media3ClearABLoop() != true) PlaybackSession.setPropertyString("ab-loop-a", "no")
+      if (!host.media3ClearABLoop()) PlaybackSession.setPropertyString("ab-loop-a", "no")
       return
     }
-    val isMedia3 = currentHost?.isMedia3Active() == true
     val currentPosMs =
-      if (isMedia3) currentHost?.media3CurrentPositionMs() ?: 0L
+      if (host.isMedia3Active()) host.media3CurrentPositionMs()
       else ((PlaybackSession.getPropertyDouble("time-pos") ?: return) * 1000.0).toLong()
     val currentPos = currentPosMs / 1000.0
     _abLoopState.update { it.copy(a = currentPos) }
-    if (currentHost?.media3SetLoopA(currentPosMs) != true) PlaybackSession.setPropertyDouble("ab-loop-a", currentPos)
+    if (!host.media3SetLoopA(currentPosMs)) PlaybackSession.setPropertyDouble("ab-loop-a", currentPos)
   }
 
   fun setLoopB() {
-    val currentHost = hostOrNull
     if (_abLoopState.value.b != null) {
       _abLoopState.update { it.copy(b = null) }
-      if (currentHost?.media3ClearABLoop() != true) PlaybackSession.setPropertyString("ab-loop-b", "no")
+      if (!host.media3ClearABLoop()) PlaybackSession.setPropertyString("ab-loop-b", "no")
       return
     }
-    val isMedia3 = currentHost?.isMedia3Active() == true
     val currentPosMs =
-      if (isMedia3) currentHost?.media3CurrentPositionMs() ?: 0L
+      if (host.isMedia3Active()) host.media3CurrentPositionMs()
       else ((PlaybackSession.getPropertyDouble("time-pos") ?: return) * 1000.0).toLong()
     val currentPos = currentPosMs / 1000.0
     _abLoopState.update { it.copy(b = currentPos) }
-    if (currentHost?.media3SetLoopB(currentPosMs) != true) PlaybackSession.setPropertyDouble("ab-loop-b", currentPos)
+    if (!host.media3SetLoopB(currentPosMs)) PlaybackSession.setPropertyDouble("ab-loop-b", currentPos)
   }
 
   fun clearABLoop() {
