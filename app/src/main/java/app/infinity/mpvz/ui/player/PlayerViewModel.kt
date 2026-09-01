@@ -4585,16 +4585,33 @@ class PlayerViewModel : ViewModel(),
     if (currentHost?.isMedia3Active() != true) return
     val borderStyle = subtitlesPreferences.borderStyle.get()
     val shadowOffset = subtitlesPreferences.shadowOffset.get()
+    val borderSize = subtitlesPreferences.borderSize.get()
+    val customBgColor = subtitlesPreferences.backgroundColor.get()
     val edgeType =
-      when {
-        borderStyle.value == "opaque-box" || borderStyle.value == "background-box" ->
+      when (borderStyle) {
+        app.infinity.mpvz.ui.player.controls.components.panels.SubtitlesBorderStyle.OpaqueBox ->
           androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_NONE
-        shadowOffset != 0 -> androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW
-        else -> androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_OUTLINE
+        app.infinity.mpvz.ui.player.controls.components.panels.SubtitlesBorderStyle.BackgroundBox,
+        app.infinity.mpvz.ui.player.controls.components.panels.SubtitlesBorderStyle.OutlineAndShadow ->
+          if (shadowOffset != 0) androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW
+          else if (borderSize > 0) androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_OUTLINE
+          else androidx.media3.ui.CaptionStyleCompat.EDGE_TYPE_NONE
+      }
+    val backgroundColor =
+      when (borderStyle) {
+        app.infinity.mpvz.ui.player.controls.components.panels.SubtitlesBorderStyle.OutlineAndShadow ->
+          customBgColor
+        app.infinity.mpvz.ui.player.controls.components.panels.SubtitlesBorderStyle.OpaqueBox ->
+          if (customBgColor != 0) customBgColor
+          else if (subtitlesPreferences.borderColor.get() != 0) subtitlesPreferences.borderColor.get()
+          else android.graphics.Color.argb(204, 0, 0, 0)
+        app.infinity.mpvz.ui.player.controls.components.panels.SubtitlesBorderStyle.BackgroundBox ->
+          if (customBgColor != 0) customBgColor
+          else android.graphics.Color.argb(128, 0, 0, 0)
       }
     currentHost.media3ApplySubtitleStyle(
       textColor = subtitlesPreferences.textColor.get(),
-      backgroundColor = subtitlesPreferences.backgroundColor.get(),
+      backgroundColor = backgroundColor,
       edgeType = edgeType,
       edgeColor = subtitlesPreferences.borderColor.get(),
       shadowColor = subtitlesPreferences.shadowColor.get(),

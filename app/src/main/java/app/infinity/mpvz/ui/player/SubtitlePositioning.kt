@@ -10,6 +10,8 @@
 package app.infinity.mpvz.ui.player
 
 import app.infinity.mpvz.preferences.SubtitlesPreferences
+import app.infinity.mpvz.ui.player.controls.components.panels.SubtitlesBorderStyle
+import app.infinity.mpvz.ui.player.controls.components.panels.toColorHexString
 import org.koin.core.context.GlobalContext
 import kotlin.math.roundToInt
 
@@ -206,4 +208,65 @@ fun applySubtitleLayout(
 ) {
   applySubtitleOverrides(forceAssOverride)
   applySubtitlePositions(primaryPosition, screenWidth, screenHeight, forceAssOverride)
+}
+
+fun applySubtitleBorderStyle(
+  preferences: SubtitlesPreferences,
+  borderStyle: SubtitlesBorderStyle = preferences.borderStyle.get(),
+) {
+  val borderSize = preferences.borderSize.get()
+  val shadowOffset = preferences.shadowOffset.get()
+  val borderColor = preferences.borderColor.get().toColorHexString()
+  val shadowColor = preferences.shadowColor.get().toColorHexString()
+  val customBgColor = preferences.backgroundColor.get()
+
+  when (borderStyle) {
+    SubtitlesBorderStyle.OutlineAndShadow -> {
+      val bgColor = customBgColor.toColorHexString()
+      for (prefix in listOf("sub-", "secondary-sub-")) {
+        PlaybackSession.setPropertyString("${prefix}ass-force-style", "BorderStyle=1")
+        PlaybackSession.setPropertyInt("${prefix}border-size", borderSize)
+        PlaybackSession.setPropertyInt("${prefix}outline-size", borderSize)
+        PlaybackSession.setPropertyInt("${prefix}shadow-offset", shadowOffset)
+        PlaybackSession.setPropertyString("${prefix}border-color", borderColor)
+        PlaybackSession.setPropertyString("${prefix}shadow-color", shadowColor)
+        PlaybackSession.setPropertyString("${prefix}back-color", bgColor)
+      }
+    }
+    SubtitlesBorderStyle.OpaqueBox -> {
+      val boxColor =
+        if (customBgColor != 0) {
+          customBgColor.toColorHexString()
+        } else if (preferences.borderColor.get() != 0) {
+          preferences.borderColor.get().toColorHexString()
+        } else {
+          "#000000CC"
+        }
+      for (prefix in listOf("sub-", "secondary-sub-")) {
+        PlaybackSession.setPropertyString("${prefix}ass-force-style", "BorderStyle=3")
+        PlaybackSession.setPropertyInt("${prefix}border-size", borderSize.coerceAtLeast(2))
+        PlaybackSession.setPropertyInt("${prefix}outline-size", borderSize.coerceAtLeast(2))
+        PlaybackSession.setPropertyInt("${prefix}shadow-offset", 0)
+        PlaybackSession.setPropertyString("${prefix}border-color", boxColor)
+        PlaybackSession.setPropertyString("${prefix}back-color", boxColor)
+      }
+    }
+    SubtitlesBorderStyle.BackgroundBox -> {
+      val bgBoxColor =
+        if (customBgColor != 0) {
+          customBgColor.toColorHexString()
+        } else {
+          "#00000080"
+        }
+      for (prefix in listOf("sub-", "secondary-sub-")) {
+        PlaybackSession.setPropertyString("${prefix}ass-force-style", "BorderStyle=4")
+        PlaybackSession.setPropertyInt("${prefix}border-size", borderSize)
+        PlaybackSession.setPropertyInt("${prefix}outline-size", borderSize)
+        PlaybackSession.setPropertyInt("${prefix}shadow-offset", shadowOffset)
+        PlaybackSession.setPropertyString("${prefix}border-color", borderColor)
+        PlaybackSession.setPropertyString("${prefix}shadow-color", shadowColor)
+        PlaybackSession.setPropertyString("${prefix}back-color", bgBoxColor)
+      }
+    }
+  }
 }

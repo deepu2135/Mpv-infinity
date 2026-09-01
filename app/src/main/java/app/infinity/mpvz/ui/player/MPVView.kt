@@ -31,6 +31,7 @@ import app.infinity.mpvz.ui.player.anime4k.applyAnime4KShaderChain
 import app.infinity.mpvz.ui.player.anime4k.applyAnime4KStabilityOptions
 import app.infinity.mpvz.ui.player.anime4k.clearAnime4KShaders
 import app.infinity.mpvz.ui.player.anime4k.selectRuntimeStableAnime4K
+import app.infinity.mpvz.ui.player.controls.components.panels.SubtitlesBorderStyle
 import app.infinity.mpvz.ui.player.controls.components.panels.toColorHexString
 import app.infinity.mpvz.ui.player.ytdlp.YtdlpManager
 import app.infinity.mpvz.utils.device.VulkanCapabilities
@@ -503,12 +504,61 @@ class MPVView(
     val italic = if (subtitlesPreferences.italic.get()) "yes" else "no"
     val justify = subtitlesPreferences.justification.get().value
     val textColor = subtitlesPreferences.textColor.get().toColorHexString()
-    val backgroundColor = subtitlesPreferences.backgroundColor.get().toColorHexString()
-    val borderColor = subtitlesPreferences.borderColor.get().toColorHexString()
-    val shadowColor = subtitlesPreferences.shadowColor.get().toColorHexString()
-    val borderSize = subtitlesPreferences.borderSize.get().toString()
-    val borderStyle = subtitlesPreferences.borderStyle.get().value
-    val shadowOffset = subtitlesPreferences.shadowOffset.get().toString()
+    val borderStyle = subtitlesPreferences.borderStyle.get()
+    val customBgColor = subtitlesPreferences.backgroundColor.get()
+
+    val forceStyle =
+      when (borderStyle) {
+        SubtitlesBorderStyle.OutlineAndShadow -> "BorderStyle=1"
+        SubtitlesBorderStyle.OpaqueBox -> "BorderStyle=3"
+        SubtitlesBorderStyle.BackgroundBox -> "BorderStyle=4"
+      }
+
+    val (effectiveBorderSize, effectiveShadowOffset, effectiveBorderColor, effectiveShadowColor, effectiveBackColor) =
+      when (borderStyle) {
+        SubtitlesBorderStyle.OutlineAndShadow -> {
+          listOf(
+            subtitlesPreferences.borderSize.get().toString(),
+            subtitlesPreferences.shadowOffset.get().toString(),
+            subtitlesPreferences.borderColor.get().toColorHexString(),
+            subtitlesPreferences.shadowColor.get().toColorHexString(),
+            customBgColor.toColorHexString(),
+          )
+        }
+        SubtitlesBorderStyle.OpaqueBox -> {
+          val boxColor =
+            if (customBgColor != 0) {
+              customBgColor.toColorHexString()
+            } else if (subtitlesPreferences.borderColor.get() != 0) {
+              subtitlesPreferences.borderColor.get().toColorHexString()
+            } else {
+              "#000000CC"
+            }
+          listOf(
+            subtitlesPreferences.borderSize.get().coerceAtLeast(2).toString(),
+            "0",
+            boxColor,
+            "#00000000",
+            boxColor,
+          )
+        }
+        SubtitlesBorderStyle.BackgroundBox -> {
+          val bgBoxColor =
+            if (customBgColor != 0) {
+              customBgColor.toColorHexString()
+            } else {
+              "#00000080"
+            }
+          listOf(
+            subtitlesPreferences.borderSize.get().toString(),
+            subtitlesPreferences.shadowOffset.get().toString(),
+            subtitlesPreferences.borderColor.get().toColorHexString(),
+            subtitlesPreferences.shadowColor.get().toColorHexString(),
+            bgBoxColor,
+          )
+        }
+      }
+
     val subPos = clampSubtitlePosition(subtitlesPreferences.subPos.get())
     val w =
       width.takeIf { it > 0 }?.toFloat() ?: context.resources.displayMetrics.widthPixels
@@ -536,12 +586,12 @@ class MPVView(
       PlaybackSession.setOptionString("${prefix}italic", italic)
       PlaybackSession.setOptionString("${prefix}justify", justify)
       PlaybackSession.setOptionString("${prefix}color", textColor)
-      PlaybackSession.setOptionString("${prefix}back-color", backgroundColor)
-      PlaybackSession.setOptionString("${prefix}border-color", borderColor)
-      PlaybackSession.setOptionString("${prefix}shadow-color", shadowColor)
-      PlaybackSession.setOptionString("${prefix}border-size", borderSize)
-      PlaybackSession.setOptionString("${prefix}border-style", borderStyle)
-      PlaybackSession.setOptionString("${prefix}shadow-offset", shadowOffset)
+      PlaybackSession.setOptionString("${prefix}back-color", effectiveBackColor)
+      PlaybackSession.setOptionString("${prefix}border-color", effectiveBorderColor)
+      PlaybackSession.setOptionString("${prefix}shadow-color", effectiveShadowColor)
+      PlaybackSession.setOptionString("${prefix}border-size", effectiveBorderSize)
+      PlaybackSession.setOptionString("${prefix}shadow-offset", effectiveShadowOffset)
+      PlaybackSession.setOptionString("${prefix}ass-force-style", forceStyle)
       PlaybackSession.setOptionString("${prefix}scale", subScale)
       PlaybackSession.setOptionString("${prefix}pos", pos)
       PlaybackSession.setOptionString("${prefix}scale-by-window", scaleByWindow)

@@ -5248,18 +5248,13 @@ class PlayerActivity :
       PlaybackSession.setPropertyBoolean("${prefix}bold", bold)
       PlaybackSession.setPropertyBoolean("${prefix}italic", italic)
       PlaybackSession.setPropertyString("${prefix}justify", justify)
-      PlaybackSession.setPropertyString("${prefix}border-style", borderStyle)
-      PlaybackSession.setPropertyInt("${prefix}border-size", borderSize)
-      PlaybackSession.setPropertyInt("${prefix}outline-size", borderSize)
-      PlaybackSession.setPropertyInt("${prefix}shadow-offset", shadowOffset)
       PlaybackSession.setPropertyString("${prefix}color", textColor)
-      PlaybackSession.setPropertyString("${prefix}border-color", borderColor)
-      PlaybackSession.setPropertyString("${prefix}back-color", backgroundColor)
-      PlaybackSession.setPropertyString("${prefix}shadow-color", shadowColor)
       PlaybackSession.setPropertyString("${prefix}scale-by-window", scaleValue)
       PlaybackSession.setPropertyString("${prefix}use-margins", scaleValue)
       PlaybackSession.setPropertyFloat("${prefix}scale", subScale)
     }
+
+    applySubtitleBorderStyle(subtitlesPreferences)
 
     PlaybackSession.setPropertyBoolean("sub-visibility", true)
 
