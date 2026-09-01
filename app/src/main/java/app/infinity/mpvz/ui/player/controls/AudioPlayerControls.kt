@@ -1075,6 +1075,7 @@ fun AudioPlayerControls(
                      features = visualizerFeatures,
                      modifier = Modifier.fillMaxSize(),
                    )
+                 AudioVisualizerStyle.None -> Unit
                }
             }
           } else {
