@@ -53,6 +53,7 @@ import app.infinity.mpvz.preferences.ThumbnailQuality
 import app.infinity.mpvz.preferences.TreeFlattenDepth
 import app.infinity.mpvz.preferences.preference.collectAsState
 import app.infinity.mpvz.presentation.Screen
+import app.infinity.mpvz.presentation.components.ConfirmDialog
 import app.infinity.mpvz.domain.network.NetworkTab
 import app.infinity.mpvz.ui.browser.dialogs.NetworkTabsDialog
 import app.infinity.mpvz.ui.icons.Icon

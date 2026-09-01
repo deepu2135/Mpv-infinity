@@ -54,6 +54,7 @@ import androidx.documentfile.provider.DocumentFile
 import app.infinity.mpvz.R
 import app.infinity.mpvz.database.MpvRxDatabase
 import app.infinity.mpvz.domain.network.NetworkTab
+import app.infinity.mpvz.domain.thumbnail.ThumbnailRepository
 import app.infinity.mpvz.preferences.BrowserPreferences
 import app.infinity.mpvz.ui.browser.dialogs.NetworkTabsDialog
 import app.infinity.mpvz.preferences.AdvancedPreferences
@@ -805,7 +806,7 @@ object AdvancedPreferencesScreen : Screen {
                 },
                 icon = {
                   Icon(
-                    Icons.RoundedFilled.Tab,
+                    Icons.RoundedFilled.Language,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                   )
@@ -1220,6 +1221,8 @@ object AdvancedPreferencesScreen : Screen {
               )
             }
           }
+        }
+      }
       if (showNetworkTabsDialog) {
         NetworkTabsDialog(
           preferences = browserPreferences,
