@@ -52,6 +52,9 @@
   <string name="pref_nav_playlists_summary">Mostrar u ocultar Listas en la barra de navegación inferior</string>
   <string name="pref_nav_network_title">Mostrar pestaña Red</string>
   <string name="pref_nav_network_summary">Mostrar u ocultar Red en la barra de navegación inferior</string>
+  <string name="pref_network_tabs_title">Pestañas de red</string>
+  <string name="pref_network_tabs_summary">Personalizar pestañas visibles y orden en la pantalla de red</string>
+  <string name="pref_network_tabs_dialog_subtitle">Activa/desactiva pestañas o usa las flechas para reorganizar el orden:</string>
   <string name="pref_quick_play_fab_title">FAB de reproducción rápida</string>
   <string name="pref_quick_play_fab_summary">Mostrar el botón flotante de reproducción rápida en las pantallas del navegador</string>
   <string name="pref_quick_play_fab_direct_title">Reproducción rápida directa</string>

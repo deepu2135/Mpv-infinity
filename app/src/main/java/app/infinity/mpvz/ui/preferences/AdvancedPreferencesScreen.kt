@@ -53,7 +53,9 @@ import androidx.core.os.LocaleListCompat
 import androidx.documentfile.provider.DocumentFile
 import app.infinity.mpvz.R
 import app.infinity.mpvz.database.MpvRxDatabase
-import app.infinity.mpvz.domain.thumbnail.ThumbnailRepository
+import app.infinity.mpvz.domain.network.NetworkTab
+import app.infinity.mpvz.preferences.BrowserPreferences
+import app.infinity.mpvz.ui.browser.dialogs.NetworkTabsDialog
 import app.infinity.mpvz.preferences.AdvancedPreferences
 import app.infinity.mpvz.preferences.FoldersPreferences
 import app.infinity.mpvz.preferences.SettingsManager
@@ -131,9 +133,11 @@ object AdvancedPreferencesScreen : Screen {
     val settingsManager = koinInject<SettingsManager>()
     val foldersPreferences = koinInject<FoldersPreferences>()
     val subtitlesPreferences = koinInject<SubtitlesPreferences>()
+    val browserPreferences = koinInject<BrowserPreferences>()
     val scope = rememberCoroutineScope()
     var showImportDialog by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
+    var showNetworkTabsDialog by remember { mutableStateOf(false) }
     var importStats by remember { mutableStateOf<SettingsManager.ImportStats?>(null) }
     var exportStats by remember { mutableStateOf<SettingsManager.ExportStats?>(null) }
     var pendingAppLanguage by remember { mutableStateOf<AppLanguage?>(null) }
@@ -778,6 +782,41 @@ object AdvancedPreferencesScreen : Screen {
 
           item {
             PreferenceCard {
+              val enabledNetworkTabs by browserPreferences.enabledNetworkTabs.collectAsState()
+              val networkTabOrder by browserPreferences.networkTabOrder.collectAsState()
+              val networkTabsSummary = remember(enabledNetworkTabs, networkTabOrder) {
+                val tabMap = NetworkTab.entries.associateBy { it.name }
+                val orderedTabs =
+                  (networkTabOrder.mapNotNull { tabMap[it] } + (NetworkTab.entries - networkTabOrder.mapNotNull { tabMap[it] }.toSet())).distinct()
+                val names = orderedTabs.filter { it.name in enabledNetworkTabs }.map { context.getString(it.titleResId) }
+                if (names.isEmpty()) context.getString(R.string.ui_local_network) else names.joinToString(", ")
+              }
+
+              Preference(
+                modifier = Modifier.settingsSearchTarget(R.string.pref_network_tabs_title),
+                title = {
+                  Text(stringResource(R.string.pref_network_tabs_title))
+                },
+                summary = {
+                  Text(
+                    text = networkTabsSummary,
+                    color = MaterialTheme.colorScheme.outline,
+                  )
+                },
+                icon = {
+                  Icon(
+                    Icons.RoundedFilled.Tab,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                  )
+                },
+                onClick = {
+                  showNetworkTabsDialog = true
+                },
+              )
+
+              PreferenceDivider()
+
               Preference(
                 title = {
                   Text(
@@ -1181,7 +1220,11 @@ object AdvancedPreferencesScreen : Screen {
               )
             }
           }
-        }
+      if (showNetworkTabsDialog) {
+        NetworkTabsDialog(
+          preferences = browserPreferences,
+          onDismiss = { showNetworkTabsDialog = false },
+        )
       }
     }
   }

@@ -52,6 +52,9 @@
   <string name="pref_nav_playlists_summary">下部ナビゲーションバーのプレイリストを表示または非表示にします</string>
   <string name="pref_nav_network_title">ネットワークタブを表示</string>
   <string name="pref_nav_network_summary">下部ナビゲーションバーのネットワークを表示または非表示にします</string>
+  <string name="pref_network_tabs_title">ネットワークタブ</string>
+  <string name="pref_network_tabs_summary">ネットワーク画面で表示するタブと順序をカスタマイズ</string>
+  <string name="pref_network_tabs_dialog_subtitle">タブの切り替えや矢印で順序を並べ替え:</string>
   <string name="pref_quick_play_fab_title">クイック再生FAB</string>
   <string name="pref_quick_play_fab_summary">ブラウザー画面にクイック再生フローティングアクションボタンを表示</string>
   <string name="pref_quick_play_fab_direct_title">ダイレクト・クイック再生</string>

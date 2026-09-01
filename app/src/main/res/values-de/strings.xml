@@ -52,6 +52,9 @@
   <string name="pref_nav_playlists_summary">Wiedergabelisten in der unteren Navigationsleiste ein- oder ausblenden</string>
   <string name="pref_nav_network_title">Netzwerk-Tab anzeigen</string>
   <string name="pref_nav_network_summary">Netzwerk in der unteren Navigationsleiste ein- oder ausblenden</string>
+  <string name="pref_network_tabs_title">Netzwerk-Tabs</string>
+  <string name="pref_network_tabs_summary">Sichtbare Tabs und Reihenfolge im Netzwerk-Bildschirm anpassen</string>
+  <string name="pref_network_tabs_dialog_subtitle">Tabs umschalten oder mit den Pfeilen die Reihenfolge ändern:</string>
   <string name="pref_quick_play_fab_title">Schnellwiedergabe-FAB</string>
   <string name="pref_quick_play_fab_summary">Schnellwiedergabe-Button in Browser-Bildschirmen anzeigen</string>
   <string name="pref_quick_play_fab_direct_title">Direkte Schnellwiedergabe</string>

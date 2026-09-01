@@ -60,6 +60,9 @@
   <string name="pref_nav_playlists_summary">Show or hide Playlists in the bottom navigation bar</string>
   <string name="pref_nav_network_title">Show Network tab</string>
   <string name="pref_nav_network_summary">Show or hide Network in the bottom navigation bar</string>
+  <string name="pref_network_tabs_title">Network tabs</string>
+  <string name="pref_network_tabs_summary">Customize visible tabs and order in Network screen</string>
+  <string name="pref_network_tabs_dialog_subtitle">Toggle tabs or use arrows to rearrange order:</string>
   <string name="pref_nav_jellyfin_title">Show Jellyfin tab</string>
   <string name="pref_nav_jellyfin_summary">Show or hide Jellyfin in the bottom navigation bar</string>
   <string name="pref_quick_play_fab_title">Quick Play FAB</string>

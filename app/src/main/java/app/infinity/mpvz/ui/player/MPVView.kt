@@ -469,11 +469,12 @@ class MPVView(
     val fontsDirPath = "${context.filesDir.path}/fonts/"
     PlaybackSession.setOptionString("sub-fonts-dir", fontsDirPath)
     // Auto-detect subtitle encoding
-    PlaybackSession.setOptionString("sub-codepage", "auto")
+    PlaybackSession.setOptionString("sub-codepage", "+auto")
     // Allow embedded fonts from MKV/MP4 containers
     PlaybackSession.setOptionString("embeddedfonts", "yes")
     // Auto-detect font provider (system fonts, embedded fonts, etc.)
     PlaybackSession.setOptionString("sub-font-provider", "auto")
+    PlaybackSession.setOptionString("sub-visibility", "yes")
 
     // Delay and speed for both primary and secondary
     val subDelay = (subtitlesPreferences.defaultSubDelay.get() / 1000.0).toString()
@@ -483,11 +484,9 @@ class MPVView(
     PlaybackSession.setOptionString("secondary-sub-delay", subDelay)
     PlaybackSession.setOptionString("secondary-sub-speed", subSpeed)
 
-    val preferredFont = subtitlesPreferences.font.get()
-    if (preferredFont.isNotBlank()) {
-      PlaybackSession.setOptionString("sub-font", preferredFont)
-    }
-    // If blank, MPV uses its default font
+    val preferredFont = subtitlesPreferences.font.get().ifBlank { "sans-serif" }
+    PlaybackSession.setOptionString("sub-font", preferredFont)
+    PlaybackSession.setOptionString("secondary-sub-font", preferredFont)
 
     if (subtitlesPreferences.overrideAssSubs.get()) {
       PlaybackSession.setOptionString("sub-ass-override", "force")

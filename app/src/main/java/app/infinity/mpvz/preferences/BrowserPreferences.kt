@@ -46,6 +46,22 @@ class BrowserPreferences(
   val networkSortType = preferenceStore.getEnum("network_sort_type", NetworkSortType.Title)
   val networkSortOrder = preferenceStore.getEnum("network_sort_order", SortOrder.Ascending)
   val networkLayoutMode = preferenceStore.getEnum("network_layout_mode", MediaLayoutMode.LIST)
+  val enabledNetworkTabs =
+    preferenceStore.getStringSet(
+      "enabled_network_tabs",
+      setOf("LOCAL_NETWORK", "SYNC_PLAY", "MEDIA"),
+    )
+  val networkTabOrder =
+    preferenceStore.getObject(
+      key = "network_tab_order",
+      defaultValue = listOf("LOCAL_NETWORK", "SYNC_PLAY", "MEDIA"),
+      serializer = { list -> list.joinToString(",") },
+      deserializer = { str ->
+        val parsed = str.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        val missing = listOf("LOCAL_NETWORK", "SYNC_PLAY", "MEDIA") - parsed.toSet()
+        parsed + missing
+      },
+    )
 
   val folderViewMode = preferenceStore.getEnum("folder_view_mode", FolderViewMode.AlbumView)
   val dualPaneForTablet = preferenceStore.getBoolean("dual_pane_for_tablet", true)

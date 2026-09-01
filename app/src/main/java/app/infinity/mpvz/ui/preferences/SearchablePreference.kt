@@ -152,6 +152,15 @@ object SearchablePreferences {
           screen = AppearancePreferencesScreen,
         ),
       )
+      add(
+        SearchablePreference(
+          titleRes = R.string.pref_network_tabs_title,
+          summaryRes = R.string.pref_network_tabs_summary,
+          keywords = listOf("network", "tabs", "local network", "syncplay", "media", "turn off", "hide", "reorder", "stream"),
+          category = "Appearance",
+          screen = AppearancePreferencesScreen,
+        ),
+      )
       // Layout preferences
       add(
         SearchablePreference(

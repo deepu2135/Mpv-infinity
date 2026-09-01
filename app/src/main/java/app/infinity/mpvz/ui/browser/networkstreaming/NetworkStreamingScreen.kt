@@ -117,17 +117,14 @@ import app.infinity.mpvz.ui.torrent.TorrentSelectionScreen
 import app.infinity.mpvz.ui.torrent.TorrentSelectionViewModel
 import app.infinity.mpvz.ui.utils.LocalBackStack
 import app.infinity.mpvz.utils.media.MediaUtils
+import app.infinity.mpvz.domain.network.NetworkTab
+import app.infinity.mpvz.preferences.BrowserPreferences
+import app.infinity.mpvz.ui.browser.dialogs.NetworkTabsDialog
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import org.koin.compose.koinInject
 
 private const val VIEWED_TORRENT_FILES_PREFS = "torrent_viewed_files"
-
-private enum class NetworkTab(val titleResId: Int) {
-  LOCAL_NETWORK(R.string.ui_local_network),
-  SYNC_PLAY(R.string.syncplay_title),
-  MEDIA(R.string.ui_media),
-}
 
 @Serializable
 object NetworkStreamingScreen : Screen {
@@ -160,6 +157,8 @@ object NetworkStreamingScreen : Screen {
     var editingConnection by remember { mutableStateOf<NetworkConnection?>(null) }
     var showTorrentPicker by remember { mutableStateOf(false) }
     var showStreamDialog by rememberSaveable { mutableStateOf(false) }
+    var showNetworkTabsDialog by remember { mutableStateOf(false) }
+    val browserPreferences = koinInject<BrowserPreferences>()
     val navigationBarHeight = app.infinity.mpvz.ui.browser.LocalNavigationBarHeight.current
     val coroutineScope = rememberCoroutineScope()
 
@@ -235,7 +234,14 @@ object NetworkStreamingScreen : Screen {
       searchQuery = ""
     }
 
-    val pagerState = rememberPagerState { NetworkTab.entries.size }
+    val visibleTabs by viewModel.visibleTabs.collectAsState()
+    val pagerState = rememberPagerState { visibleTabs.size }
+
+    LaunchedEffect(visibleTabs) {
+      if (pagerState.currentPage >= visibleTabs.size) {
+        pagerState.scrollToPage((visibleTabs.size - 1).coerceAtLeast(0))
+      }
+    }
 
     Scaffold(
       topBar = {
@@ -310,10 +316,11 @@ object NetworkStreamingScreen : Screen {
         }
       },
       floatingActionButton = {
-        if (pagerState.currentPage == NetworkTab.LOCAL_NETWORK.ordinal || pagerState.currentPage == NetworkTab.MEDIA.ordinal) {
+        val currentTab = visibleTabs.getOrNull(pagerState.currentPage)
+        if (currentTab == NetworkTab.LOCAL_NETWORK || currentTab == NetworkTab.MEDIA) {
           ExtendedFloatingActionButton(
             onClick = {
-              if (pagerState.currentPage == NetworkTab.LOCAL_NETWORK.ordinal) {
+              if (currentTab == NetworkTab.LOCAL_NETWORK) {
                 showAddSheet = true
               } else {
                 showStreamDialog = true
@@ -322,7 +329,7 @@ object NetworkStreamingScreen : Screen {
             icon = { Icon(Icons.RoundedFilled.Add, contentDescription = null) },
             text = {
               Text(
-                if (pagerState.currentPage == NetworkTab.LOCAL_NETWORK.ordinal) {
+                if (currentTab == NetworkTab.LOCAL_NETWORK) {
                   stringResource(R.string.ui_add_connection)
                 } else {
                   stringResource(R.string.ui_add_stream)
@@ -366,26 +373,28 @@ object NetworkStreamingScreen : Screen {
           onDeleteRecent = viewModel::deleteStreamEntry,
         )
 
-        ScrollableTabRow(
-          selectedTabIndex = pagerState.currentPage,
-          edgePadding = 16.dp,
-          containerColor = MaterialTheme.colorScheme.surface,
-          contentColor = MaterialTheme.colorScheme.primary,
-          divider = {},
-        ) {
-          NetworkTab.entries.forEachIndexed { index, tab ->
-            Tab(
-              selected = pagerState.currentPage == index,
-              onClick = {
-                coroutineScope.launch { pagerState.animateScrollToPage(index) }
-              },
-              text = {
-                Text(
-                  text = stringResource(tab.titleResId),
-                  fontWeight = if (pagerState.currentPage == index) FontWeight.Bold else FontWeight.Normal,
-                )
-              },
-            )
+        if (visibleTabs.size > 1) {
+          ScrollableTabRow(
+            selectedTabIndex = pagerState.currentPage.coerceIn(0, (visibleTabs.size - 1).coerceAtLeast(0)),
+            edgePadding = 16.dp,
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.primary,
+            divider = {},
+          ) {
+            visibleTabs.forEachIndexed { index, tab ->
+              Tab(
+                selected = pagerState.currentPage == index,
+                onClick = {
+                  coroutineScope.launch { pagerState.animateScrollToPage(index) }
+                },
+                text = {
+                  Text(
+                    text = stringResource(tab.titleResId),
+                    fontWeight = if (pagerState.currentPage == index) FontWeight.Bold else FontWeight.Normal,
+                  )
+                },
+              )
+            }
           }
         }
 
@@ -395,10 +404,10 @@ object NetworkStreamingScreen : Screen {
             Modifier
               .fillMaxSize()
               .weight(1f),
-          userScrollEnabled = true,
+          userScrollEnabled = visibleTabs.size > 1,
           beyondViewportPageCount = 1,
         ) { page ->
-          when (NetworkTab.entries[page]) {
+          when (visibleTabs.getOrNull(page)) {
             NetworkTab.LOCAL_NETWORK -> {
               LocalNetworkContent(
                 connections = filteredConnections,
@@ -443,6 +452,7 @@ object NetworkStreamingScreen : Screen {
                 onDeleteTorrentGroup = { viewModel.deleteTorrentGroup(it.group) },
               )
             }
+            null -> Unit
           }
         }
       }
@@ -477,6 +487,13 @@ object NetworkStreamingScreen : Screen {
           },
           onRetry = torrentPickerViewModel::retry,
           onSelect = torrentPickerViewModel::select,
+        )
+      }
+
+      if (showNetworkTabsDialog) {
+        NetworkTabsDialog(
+          preferences = browserPreferences,
+          onDismiss = { showNetworkTabsDialog = false },
         )
       }
     }

@@ -26,10 +26,13 @@ import app.infinity.mpvz.repository.NetworkRepository
 import app.infinity.mpvz.repository.wyzie.WyzieSearchRepository
 import app.infinity.mpvz.repository.wyzie.WyzieTmdbResult
 import app.infinity.mpvz.repository.wyzie.bestTmdbResult
+import app.infinity.mpvz.domain.network.NetworkTab
+import app.infinity.mpvz.preferences.BrowserPreferences
 import app.infinity.mpvz.utils.media.MediaInfoParser
 import app.infinity.mpvz.utils.media.MediaUtils
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -63,6 +66,19 @@ class NetworkStreamingViewModel(
   private val repository: NetworkRepository by inject()
   private val streamEntryRepository: NetworkStreamEntryRepository by inject()
   private val wyzieSearchRepository: WyzieSearchRepository by inject()
+  private val browserPreferences: BrowserPreferences by inject()
+
+  val visibleTabs: StateFlow<List<NetworkTab>> =
+    combine(
+      browserPreferences.networkTabOrder.changes(),
+      browserPreferences.enabledNetworkTabs.changes(),
+    ) { orderList, enabledSet ->
+      val tabMap = NetworkTab.entries.associateBy { it.name }
+      val orderedTabs =
+        (orderList.mapNotNull { tabMap[it] } + (NetworkTab.entries - orderList.mapNotNull { tabMap[it] }.toSet())).distinct()
+      val filtered = orderedTabs.filter { it.name in enabledSet }
+      if (filtered.isEmpty()) listOf(NetworkTab.LOCAL_NETWORK) else filtered
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NetworkTab.entries.toList())
 
   private val enrichmentAttempts = mutableMapOf<String, Long>()
 

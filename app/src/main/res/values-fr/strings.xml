@@ -52,6 +52,9 @@
   <string name="pref_nav_playlists_summary">Afficher ou masquer Listes de lecture dans la barre de navigation inférieure</string>
   <string name="pref_nav_network_title">Afficher l’onglet Réseau</string>
   <string name="pref_nav_network_summary">Afficher ou masquer Réseau dans la barre de navigation inférieure</string>
+  <string name="pref_network_tabs_title">Onglets Réseau</string>
+  <string name="pref_network_tabs_summary">Personnaliser les onglets visibles et leur ordre dans l’écran Réseau</string>
+  <string name="pref_network_tabs_dialog_subtitle">Activer/désactiver les onglets ou utiliser les flèches pour réorganiser l’ordre :</string>
   <string name="pref_quick_play_fab_title">FAB de lecture rapide</string>
   <string name="pref_quick_play_fab_summary">Afficher le bouton d\’action flottant de lecture rapide dans les écrans du navigateur</string>
   <string name="pref_quick_play_fab_direct_title">Lecture rapide directe</string>

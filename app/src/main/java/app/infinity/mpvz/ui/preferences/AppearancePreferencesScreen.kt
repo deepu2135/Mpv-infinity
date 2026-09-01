@@ -53,7 +53,8 @@ import app.infinity.mpvz.preferences.ThumbnailQuality
 import app.infinity.mpvz.preferences.TreeFlattenDepth
 import app.infinity.mpvz.preferences.preference.collectAsState
 import app.infinity.mpvz.presentation.Screen
-import app.infinity.mpvz.presentation.components.ConfirmDialog
+import app.infinity.mpvz.domain.network.NetworkTab
+import app.infinity.mpvz.ui.browser.dialogs.NetworkTabsDialog
 import app.infinity.mpvz.ui.icons.Icon
 import app.infinity.mpvz.ui.icons.Icons
 import app.infinity.mpvz.ui.player.ControlsAnimationStyle
@@ -99,6 +100,7 @@ object AppearancePreferencesScreen : Screen {
     val appTheme by preferences.appTheme.collectAsState()
     var pendingThumbnailMode by remember { mutableStateOf<ThumbnailMode?>(null) }
     var isThemeSectionExpanded by rememberSaveable { mutableStateOf(true) }
+    var showNetworkTabsDialog by remember { mutableStateOf(false) }
     val storedThumbnailMode by browserPreferences.thumbnailMode.collectAsState()
     val thumbnailQuality by browserPreferences.thumbnailQuality.collectAsState()
     val thumbnailFramePosition by browserPreferences.thumbnailFramePosition.collectAsState()
@@ -829,6 +831,38 @@ object AppearancePreferencesScreen : Screen {
                 },
               )
 
+              if (showNetworkTab) {
+                PreferenceDivider()
+                val enabledNetworkTabs by browserPreferences.enabledNetworkTabs.collectAsState()
+                val networkTabOrder by browserPreferences.networkTabOrder.collectAsState()
+                val networkTabsSummary = remember(enabledNetworkTabs, networkTabOrder) {
+                  val tabMap = NetworkTab.entries.associateBy { it.name }
+                  val orderedTabs =
+                    (networkTabOrder.mapNotNull { tabMap[it] } + (NetworkTab.entries - networkTabOrder.mapNotNull { tabMap[it] }.toSet())).distinct()
+                  val names = orderedTabs.filter { it.name in enabledNetworkTabs }.map { context.getString(it.titleResId) }
+                  if (names.isEmpty()) context.getString(R.string.ui_local_network) else names.joinToString(", ")
+                }
+
+                Column(
+                  modifier =
+                    Modifier
+                      .settingsSearchTarget(R.string.pref_network_tabs_title)
+                      .fillMaxWidth()
+                      .clickable { showNetworkTabsDialog = true }
+                      .padding(horizontal = 16.dp, vertical = 12.dp),
+                ) {
+                  Text(
+                    text = stringResource(R.string.pref_network_tabs_title),
+                    style = MaterialTheme.typography.bodyLarge,
+                  )
+                  Text(
+                    text = networkTabsSummary,
+                    color = MaterialTheme.colorScheme.outline,
+                    style = MaterialTheme.typography.bodyMedium,
+                  )
+                }
+              }
+
               PreferenceDivider()
 
               SwitchPreference(
@@ -968,6 +1002,12 @@ object AppearancePreferencesScreen : Screen {
             }
           }
         }
+      }
+      if (showNetworkTabsDialog) {
+        NetworkTabsDialog(
+          preferences = browserPreferences,
+          onDismiss = { showNetworkTabsDialog = false },
+        )
       }
     }
   }

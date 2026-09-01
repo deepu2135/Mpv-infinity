@@ -52,6 +52,9 @@
   <string name="pref_nav_playlists_summary">إظهار أو إخفاء قوائم التشغيل في شريط التنقل السفلي</string>
   <string name="pref_nav_network_title">إظهار علامة تبويب الشبكة</string>
   <string name="pref_nav_network_summary">إظهار أو إخفاء الشبكة في شريط التنقل السفلي</string>
+  <string name="pref_network_tabs_title">علامات تبويب الشبكة</string>
+  <string name="pref_network_tabs_summary">تخصيص علامات التبويب المرئية وترتيبها في شاشة الشبكة</string>
+  <string name="pref_network_tabs_dialog_subtitle">قم بتبديل علامات التبويب أو استخدام الأسهم لتغيير الترتيب:</string>
   <string name="pref_quick_play_fab_title">زر التشغيل السريع (FAB)</string>
   <string name="pref_quick_play_fab_summary">إظهار زر التشغيل السريع في شاشات المتصفح</string>
   <string name="pref_quick_play_fab_direct_title">التشغيل السريع المباشر</string>

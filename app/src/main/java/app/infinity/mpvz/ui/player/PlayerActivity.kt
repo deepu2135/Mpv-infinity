@@ -5243,7 +5243,7 @@ class PlayerActivity :
     PlaybackSession.setPropertyString("blend-subtitles", blendMode)
 
     for (prefix in listOf("sub-", "secondary-sub-")) {
-      PlaybackSession.setPropertyString("${prefix}font", font)
+      PlaybackSession.setPropertyString("${prefix}font", font.ifBlank { "sans-serif" })
       PlaybackSession.setPropertyInt("${prefix}font-size", fontSize)
       PlaybackSession.setPropertyBoolean("${prefix}bold", bold)
       PlaybackSession.setPropertyBoolean("${prefix}italic", italic)
@@ -5260,6 +5260,8 @@ class PlayerActivity :
       PlaybackSession.setPropertyString("${prefix}use-margins", scaleValue)
       PlaybackSession.setPropertyFloat("${prefix}scale", subScale)
     }
+
+    PlaybackSession.setPropertyBoolean("sub-visibility", true)
 
     applySubtitleLayout(
       primaryPosition = subtitlesPreferences.subPos.get(),
@@ -5290,7 +5292,7 @@ class PlayerActivity :
     val r = (this shr 16 and 0xFF).toString(16).padStart(2, '0')
     val g = (this shr 8 and 0xFF).toString(16).padStart(2, '0')
     val b = (this and 0xFF).toString(16).padStart(2, '0')
-    return "#$a$r$g$b".uppercase()
+    return "#$r$g$b$a".uppercase()
   }
 
   private fun canIssueMpvCommands(): Boolean = mpvInitialized && !player.isExiting && !isDestroyed

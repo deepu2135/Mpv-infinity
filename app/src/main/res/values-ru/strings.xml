@@ -52,6 +52,9 @@
   <string name="pref_nav_playlists_summary">Показывать или скрывать «Плейлисты» на нижней панели навигации</string>
   <string name="pref_nav_network_title">Показывать вкладку «Сеть»</string>
   <string name="pref_nav_network_summary">Показывать или скрывать «Сеть» на нижней панели навигации</string>
+  <string name="pref_network_tabs_title">Вкладки сети</string>
+  <string name="pref_network_tabs_summary">Настройка видимых вкладок и порядка на экране сети</string>
+  <string name="pref_network_tabs_dialog_subtitle">Включите/выключите вкладки или используйте стрелки для изменения порядка:</string>
   <string name="pref_quick_play_fab_title">Кнопка быстрого воспроизведения</string>
   <string name="pref_quick_play_fab_summary">Показывать плавующую кнопку быстрого воспроизведения на экранах браузера</string>
   <string name="pref_quick_play_fab_direct_title">Прямое быстрое воспроизведение</string>

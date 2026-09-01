@@ -238,8 +238,9 @@ fun SubtitleSettingsTypographyCard(
           onValueChangedEvent = {
             val actualFont = if (it == "Default") "" else it
             preferences.font.set(actualFont)
-            PlaybackSession.setPropertyString("sub-font", actualFont)
-            PlaybackSession.setPropertyString("secondary-sub-font", actualFont)
+            val mpvFont = actualFont.ifBlank { "sans-serif" }
+            PlaybackSession.setPropertyString("sub-font", mpvFont)
+            PlaybackSession.setPropertyString("secondary-sub-font", mpvFont)
             viewModel.applyNativeSubtitleStyle()
           },
           leadingIcon = fontsLoadingIndicator,
@@ -323,7 +324,7 @@ fun resetTypography(preferences: SubtitlesPreferences) {
   val bold = preferences.bold.deleteAndGet()
   val italic = preferences.italic.deleteAndGet()
   val justify = preferences.justification.deleteAndGet().value
-  val font = preferences.font.deleteAndGet()
+  val font = preferences.font.deleteAndGet().ifBlank { "sans-serif" }
   val fontSize = preferences.fontSize.deleteAndGet()
   val borderSize = preferences.borderSize.deleteAndGet()
   val shadowOffset = preferences.shadowOffset.deleteAndGet()

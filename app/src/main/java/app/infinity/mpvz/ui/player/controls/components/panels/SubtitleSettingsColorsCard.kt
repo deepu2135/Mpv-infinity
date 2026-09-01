@@ -161,7 +161,7 @@ fun Int.toColorHexString(): String {
   val r = (this shr 16 and 0xFF).toString(16).padStart(2, '0')
   val g = (this shr 8 and 0xFF).toString(16).padStart(2, '0')
   val b = (this and 0xFF).toString(16).padStart(2, '0')
-  return "#$a$r$g$b".uppercase()
+  return "#$r$g$b$a".uppercase()
 }
 
 enum class SubColorType(
@@ -207,7 +207,23 @@ fun resetColors(
 }
 
 val getCurrentMPVColor: (SubColorType) -> Int = {
-  PlaybackSession.getPropertyString(it.property)?.uppercase()?.toColorInt() ?: 0xFFFFFFFF.toInt()
+  val prop = PlaybackSession.getPropertyString(it.property)?.uppercase()
+  if (prop != null && prop.startsWith("#") && prop.length == 9) {
+    // MPV format: #RRGGBBAA -> Android ARGB: AARRGGBB
+    val r = prop.substring(1, 3).toIntOrNull(16) ?: 255
+    val g = prop.substring(3, 5).toIntOrNull(16) ?: 255
+    val b = prop.substring(5, 7).toIntOrNull(16) ?: 255
+    val a = prop.substring(7, 9).toIntOrNull(16) ?: 255
+    (a shl 24) or (r shl 16) or (g shl 8) or b
+  } else if (prop != null && prop.startsWith("#") && prop.length == 7) {
+    // MPV format: #RRGGBB -> Android ARGB: FF RRGGBB
+    val r = prop.substring(1, 3).toIntOrNull(16) ?: 255
+    val g = prop.substring(3, 5).toIntOrNull(16) ?: 255
+    val b = prop.substring(5, 7).toIntOrNull(16) ?: 255
+    (0xFF shl 24) or (r shl 16) or (g shl 8) or b
+  } else {
+    prop?.toColorInt() ?: 0xFFFFFFFF.toInt()
+  }
 }
 
 @Composable

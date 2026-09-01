@@ -52,6 +52,9 @@
   <string name="pref_nav_playlists_summary">नीचे की नेविगेशन बार में प्लेलिस्ट दिखाएं या छुपाएं</string>
   <string name="pref_nav_network_title">नेटवर्क टैब दिखाएं</string>
   <string name="pref_nav_network_summary">नीचे की नेविगेशन बार में नेटवर्क दिखाएं या छुपाएं</string>
+  <string name="pref_network_tabs_title">नेटवर्क टैब</string>
+  <string name="pref_network_tabs_summary">नेटवर्क स्क्रीन में दिखने वाले टैब और क्रम को कस्टमाइज़ करें</string>
+  <string name="pref_network_tabs_dialog_subtitle">टैब टॉगल करें या क्रम बदलने के लिए तीरों का उपयोग करें:</string>
   <string name="pref_quick_play_fab_title">क्विक प्ले FAB</string>
   <string name="pref_quick_play_fab_summary">ब्राउज़र स्क्रीन में क्विक प्ले फ्लोटिंग एक्शन बटन दिखाएं</string>
   <string name="pref_quick_play_fab_direct_title">डायरेक्ट क्विक प्ले</string>
