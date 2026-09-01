@@ -114,9 +114,10 @@ private fun bufferedEndPx(
   if (duration <= 0f || trackWidth <= 0f) {
     return playedPx
   }
-  val playedPosition = (playedPx / trackWidth * duration).coerceIn(0f, duration)
+  val safePlayedPx = playedPx.takeIf { it.isFinite() }?.coerceIn(0f, trackWidth) ?: 0f
+  val playedPosition = (safePlayedPx / trackWidth * duration).coerceIn(0f, duration)
   val bufferedUntil = normalizedReadAheadValue(bufferPosition, playedPosition, duration)
-  return (bufferedUntil / duration * trackWidth).coerceIn(playedPx, trackWidth)
+  return (bufferedUntil / duration * trackWidth).coerceIn(safePlayedPx, trackWidth)
 }
 
 /**

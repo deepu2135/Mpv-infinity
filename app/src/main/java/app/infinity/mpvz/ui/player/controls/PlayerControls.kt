@@ -328,8 +328,11 @@ fun PlayerControls(
           ?.toFloat()
           ?.takeIf { it > basePos && !it.isNaN() && !it.isInfinite() }
       (fromDuration ?: fromTime)
-        ?.takeIf { it > 0f && seekbarDuration > 0f }
-        ?.coerceIn(basePos, seekbarDuration)
+        ?.takeIf { it > 0f && !it.isNaN() && !it.isInfinite() && seekbarDuration > 0f }
+        ?.let { raw ->
+          val safeBase = basePos.takeIf { it.isFinite() }?.coerceIn(0f, seekbarDuration) ?: 0f
+          raw.coerceIn(0f, seekbarDuration).coerceAtLeast(safeBase)
+        }
     }
 
   LaunchedEffect(showBufferedRange, seekbarDuration, currentBufferedPosition) {
