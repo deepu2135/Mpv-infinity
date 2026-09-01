@@ -11,7 +11,7 @@ package app.infinity.mpvz.ui.player.controls
 
 import app.infinity.mpvz.ui.player.PlaybackSession
 import app.infinity.mpvz.presentation.components.RemoteImage
-import app.infinity.mpvz.Utils
+import `is`.xyz.mpv.Utils
 
 import android.Manifest
 import android.content.pm.PackageManager
