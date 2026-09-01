@@ -1240,7 +1240,6 @@ class PlayerActivity :
     binding.controls.setContent {
       MpvrxTheme {
         Box(modifier = Modifier.fillMaxSize()) {
-          val torrentState by torrentStreamingEngine.state.collectAsState()
           PlayerControls(
             viewModel = viewModel,
             onBackPress = ::handleBackPress,
@@ -1276,7 +1275,6 @@ class PlayerActivity :
                 PlaybackSession.setPropertyString("hwdec", decoder.value)
               }
             },
-            torrentStreamingState = torrentState,
             modifier = Modifier,
           )
         }

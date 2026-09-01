@@ -142,6 +142,7 @@ import app.infinity.mpvz.ui.player.buildControlsExitV
 import app.infinity.mpvz.ui.player.controls.components.AnimatedPlayPauseIcon
 import app.infinity.mpvz.ui.player.controls.components.PlayerGlassSurface
 import app.infinity.mpvz.ui.player.controls.components.BrightnessSlider
+import app.infinity.mpvz.domain.torrent.TorrentStreamingEngine
 import app.infinity.mpvz.domain.torrent.TorrentStreamingState
 import app.infinity.mpvz.preferences.SubtitlesPreferences
 import app.infinity.mpvz.ui.player.controls.components.MultipleSpeedPlayerUpdate
@@ -206,7 +207,6 @@ fun PlayerControls(
   onMedia3AudioProcessing: (Boolean, Boolean) -> Unit = { _, _ -> },
   onMedia3AudioPitchCorrection: (Boolean) -> Unit = {},
   modifier: Modifier = Modifier,
-  torrentStreamingState: TorrentStreamingState = TorrentStreamingState.Idle,
 ) {
   val spacing = MaterialTheme.spacing
   val advancedPreferences = koinInject<AdvancedPreferences>()
@@ -219,6 +219,8 @@ fun PlayerControls(
   val portraitPlaybackControlsPosition by
     appearancePreferences.portraitPlaybackControlsPosition.collectAsState()
   val playerPreferences = koinInject<PlayerPreferences>()
+  val torrentStreamingEngine = koinInject<TorrentStreamingEngine>()
+  val torrentStreamingState by torrentStreamingEngine.state.collectAsState(initial = TorrentStreamingState.Idle)
   val subtitlesPreferences = koinInject<SubtitlesPreferences>()
   val subtitleFontSize by subtitlesPreferences.fontSize.collectAsState()
   val subtitleScale by subtitlesPreferences.subScale.collectAsState()
